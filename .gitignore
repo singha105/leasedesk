@@ -1,0 +1,29 @@
+# secrets and local state: never commit
+.env
+.env.*
+!.env.example
+.secrets/
+.state/
+logs/
+*.pem
+*.key
+credentials
+*.credentials.json
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/

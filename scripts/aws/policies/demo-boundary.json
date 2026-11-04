@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CeilingForAnyLease",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject", "s3:ListBucket", "s3:PutObject",
+        "logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:s3:::leasedesk-demo-*",
+        "arn:aws:s3:::leasedesk-demo-*/*",
+        "arn:aws:logs:us-east-1:<ACCOUNT_ID>:log-group:/leasedesk/*"
+      ]
+    }
+  ]
+}

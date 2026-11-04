@@ -1,0 +1,50 @@
+"""Foundation tests: settings defaults and log redaction (security model rule 7)."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+import structlog
+
+from leasedesk.common.logging import REDACTED, configure_logging, redact, redact_text
+from leasedesk.config import Settings
+
+
+def test_aws_mode_defaults_to_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LEASEDESK_AWS_MODE", raising=False)
+    assert Settings(_env_file=None).aws_mode == "mock"  # type: ignore[call-arg]
+
+
+def test_registration_key_never_prints(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SWITCH_REGISTRATION_KEY", "reg-key-should-not-appear")
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert "reg-key-should-not-appear" not in repr(settings)
+    assert "reg-key-should-not-appear" not in str(settings.model_dump())
+
+
+def test_redacts_secret_keys_recursively() -> None:
+    data = {"agent": {"id": "a1", "api_key": "sk-live-123"}, "headers": {"Authorization": "x"}}
+    out = redact(data)
+    assert out == {
+        "agent": {"id": "a1", "api_key": REDACTED},
+        "headers": {"Authorization": REDACTED},
+    }
+
+
+def test_redacts_secret_patterns_in_text() -> None:
+    text = "calling with Bearer abcdefghijklmnop and key AKIAABCDEFGHIJKLMNOP"
+    out = redact_text(text)
+    assert "abcdefghijklmnop" not in out
+    assert "AKIAABCDEFGHIJKLMNOP" not in out
+
+
+def test_log_lines_are_redacted(capsys: pytest.CaptureFixture[str]) -> None:
+    structlog.reset_defaults()
+    configure_logging("INFO")
+    structlog.get_logger("t").info("registered", agent_id="a1", api_key="sk-live-123")
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    record = json.loads(line)
+    assert record["api_key"] == REDACTED
+    assert "sk-live-123" not in line
+    structlog.reset_defaults()

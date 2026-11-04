@@ -1,0 +1,1900 @@
+{
+  "operations": {
+    "add_users_to_room": {
+      "description": "Add one or more human users to an existing bridged room by name.\n\n    Unlike `invite_agent_to_room` (which adds agents), this adds humans. The\n    room must already be bridged: each user is added to the room's external\n    channel (Slack/Mattermost) and joined to the Switch room. Each name must\n    be a user already known to that bridge \u2014 e.g. someone who has signed into\n    the workspace \u2014 otherwise the bridge cannot resolve them. Use this after a\n    bridge change to re-invite the humans who were dropped, since their\n    identities are bridge-specific and are not carried across.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n        user_names: The people to add, each named by their username on the\n            room's messaging app, or by the e-mail address of their account\n            there (not on Discord, which never shares e-mail addresses); their\n            Switch name does not resolve. Your owner's usernames\n            are in `get_my_context` (`messaging_apps`, `your_usernames`).\n\n    Returns:\n        `{\"ok\": bool, \"added\": [...], \"unresolved\": [...]}`. `unresolved`\n        lists names the bridge had no external user for \u2014 they were skipped,\n        not added (likely they have not signed into the workspace yet). `ok`\n        is true only when every requested name was added.",
+      "input_schema": {
+        "properties": {
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "user_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "User Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "room_id",
+          "user_names"
+        ],
+        "type": "object"
+      }
+    },
+    "archive_room": {
+      "description": "Archive a room you are a member of, hiding it from the default active\n    room lists once its work is complete.\n\n    Archiving is metadata-only and fully reversible: the room, its\n    members, and any bridge channel are left intact, and the room can still\n    be connected to and read. It simply stops appearing in `list_rooms` /\n    `list_all_rooms` (and the management UI) unless archived rooms are\n    explicitly requested. Use this for ephemeral rooms (e.g. a finished\n    feature-implementation or bug-fix room) to keep the active list tidy.\n    Reverse it with `unarchive_room`.\n\n    You must be a member of the room and have write access to it; fails with\n    a permission error otherwise.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n\n    Returns:\n        The full, updated room detail (same shape as get_room_detail).",
+      "input_schema": {
+        "properties": {
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "type": "object"
+      }
+    },
+    "assume_role": {
+      "description": "Assume a role in the connected room and receive its instructions.\n\n    Returns `{\"role\", \"instructions\"}` \u2014 the role's instruction delta to layer\n    on top of the room context you already have. Any room member may assume a\n    role. Fails if you already hold a role (release it first), or if the role\n    is exclusive and currently held by another live agent.\n\n    For exclusive roles, this acquires a lease held by you specifically: while\n    your session stays alive the seat is yours, and it auto-releases shortly\n    after you disconnect so another agent can take over. A sibling session of\n    the same agent cannot hold it open on your behalf.",
+      "input_schema": {
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      }
+    },
+    "attach_reference_to_room": {
+      "description": "Attach an existing Reference to an existing room.\n\n    Authorization: your agent's owner must be able to access the\n    reference (public, owned by them, or they are an admin). Use\n    `create_reference` first if you need to create one.\n\n    Args:\n        room_id: Switch room id to attach to.\n        reference_id: Id of the reference to attach.\n\n    Returns:\n        `{\"ok\": true}` on success.",
+      "input_schema": {
+        "properties": {
+          "reference_id": {
+            "title": "Reference Id",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "reference_id"
+        ],
+        "type": "object"
+      }
+    },
+    "connect_to_room": {
+      "description": "Connect this session to a room. The agent must be assigned to the room.\n\n    Args:\n        room_id: The Switch room id (UUID string) to connect to. Get valid\n            ids from list_rooms. This is the Switch room id, not the\n            transport room id. Calling again switches the active room for this session.\n        include_general_instructions: When true (default) the `instructions`\n            field carries the full room-onboarding text (interaction modes,\n            agent statuses, room setup) followed by any\n            room-specific instructions. Set false if your host already\n            injects the general Switch usage instructions out-of-band (e.g.\n            via a Claude Code skill); the general sections are then omitted\n            but room-specific instructions configured at room creation are\n            still returned.\n\n    Returns:\n        {agent_id, room_id, name, description, participants, instructions,\n         reference_types, references, documents, packages, linked_rooms,\n         roles, warning}.\n        `warning` is normally null. It is set when connecting took the room off\n        another live session of this same agent \u2014 only one session of an agent\n        may act in a room, so that session was disconnected from it to let this\n        one in. Surface it rather than ignoring it: it means work may have been\n        interrupted somewhere else.\n        Each reference, document, and package carries its own `instructions`\n        field \u2014 agent-facing guidance for that resource \u2014 alongside a short\n        `description`. `roles` lists the room's assumable roles, each\n        `{name, exclusive, instructions_preview, held_by, assumable_by_me}` \u2014\n        `held_by` is the list of agent names currently holding it (live lease;\n        empty if free, and a shared role may list several), so you can see\n        which roles are taken and by whom before calling\n        `assume_role`. `linked_rooms` lists directed pointers from this room\n        to other Switch rooms: each entry has `target_room_id`,\n        `target_room_name`, `target_room_description`, `label` (free-text\n        relationship hint set by the operator) and `access` \u2014\n        either ``\"member\"`` (you can `connect_to_room(target_room_id)`) or\n        ``\"not_member\"`` (you have NOT been assigned to that room; the\n        connect call WILL fail \u2014 ask the operator to add you first).",
+      "input_schema": {
+        "properties": {
+          "include_general_instructions": {
+            "default": true,
+            "title": "Include General Instructions",
+            "type": "boolean"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "type": "object"
+      }
+    },
+    "create_agent": {
+      "description": "Create a new managed agent for your owner, running on one of their machines.\n\n    Requires the \"can manage agents\" capability, which your owner turns on for\n    you. The new agent is owned by your owner (not by you), runs on the\n    machine you name, and can be addressed by your owner and your owner's\n    other agents (you included) until they say otherwise. It does not get the\n    \"can manage agents\" capability itself.\n    Confirm the name, machine and provider with the person asking before you\n    call this: it creates a real agent on their computer.\n\n    The machine must be online and have the provider installed and logged in.\n    When it is not, nothing is created and the error says why (with a reason\n    code such as `controller_offline`, `provider_not_installed`,\n    `provider_login_missing` or `provider_login_expired`); relay it as it is.\n\n    Args:\n        name: The new agent's name, unique on this Switch instance; it is what\n            people address it by.\n        description: What the agent is for, shown to people and agents.\n        machine: The machine's `id`, or its exact `name`, from\n            `list_machines`. A name shared by several machines is refused with\n            the candidates listed; pass the id instead.\n        provider: The agent CLI to run, by its id as `list_machines` reports\n            it, such as \"claude\" for Claude Code. An unknown id is refused\n            with the ids Switch runs.\n        model: The model to run, or null for the provider's default.\n        advanced_config: The provider's advanced settings, such as\n            {\"effort\": \"high\"} for Claude Code or Codex, keyed by the fields\n            `get_advanced_config(provider)` lists; a field left out is left\n            unset. Each value is checked against that field. Null for none.\n        instructions: Standing instructions for the agent (at most 32 KiB).\n        directory: The working directory on the machine, or null for the\n            machine's own workspace for the agent; Switch fills that path in\n            when the machine has reported where it keeps workspaces, and the\n            machine makes the directory if it is missing. Any other directory\n            must already exist there.\n        auto_mode: Auto mode, on by default: the provider's own automatic\n            review lets safe actions run without asking and still asks a\n            person before risky ones. Leave it on unless the person asks for\n            every action to be approved.\n        auto_approve: Bypass mode: the agent runs every tool without any\n            permission check, and this overrides `auto_mode`. Unsafe; set it\n            only when the person explicitly asks for bypass.\n        display_name: A human label shown next to `name`, or null for none.\n        icon_url: An https link to the agent's icon, or null for the icon\n            its name generates, the same one Switch Console offers first. A\n            server with third-party avatars off generates none, and the agent\n            then shows each platform's default icon.\n        start: Start the agent now (true) or create it stopped (false).\n\n    Returns:\n        {agent_id, name, machine: {id, name}, desired_state, hint}.\n        `desired_state` is \"running\" or \"stopped\". Check the agent with\n        `list_managed_agents` straight away; while its `actual` is still\n        null, \"pending\" or \"starting\", check again every 2 seconds, for at\n        most a minute.",
+      "input_schema": {
+        "properties": {
+          "advanced_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Advanced Config"
+          },
+          "auto_approve": {
+            "default": false,
+            "title": "Auto Approve",
+            "type": "boolean"
+          },
+          "auto_mode": {
+            "default": true,
+            "title": "Auto Mode",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Directory"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Icon Url"
+          },
+          "instructions": {
+            "default": "",
+            "title": "Instructions",
+            "type": "string"
+          },
+          "machine": {
+            "title": "Machine",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Model"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "start": {
+            "default": true,
+            "title": "Start",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "machine",
+          "provider"
+        ],
+        "type": "object"
+      }
+    },
+    "create_reference": {
+      "description": "Create a new Reference owned by your user.\n\n    A Reference is a pointer to external content (e.g. Google Drive\n    documents, Confluence pages, GitHub repositories, Jira issues) that can\n    be attached to rooms so other agents and humans in the room can discover\n    and access it.\n\n    Args:\n        type: Reference type \u2014 a slug `list_reference_types` returned for\n            YOU. The set is open (users define their own types) and\n            per-caller, so call `list_reference_types` first rather than\n            guessing a slug; an unknown or unreadable one is rejected.\n        name: Short display name.\n        description: One-or-two sentence summary of what this reference\n            points at, shown in listings.\n        instructions: Free-text guidance for agents on how to USE this\n            reference \u2014 what's in it, when to consult it, any caveats.\n            This is the field agents read when the reference shows up in\n            their room context.\n        value: `{\"urls\": [\"https://...\", ...]}` \u2014 the shape every type\n            shares, with at least one URL. What those URLs should point at\n            is the type's `value_hint` from `list_reference_types` (for\n            \"jira\", say, projects, issues, or boards).\n        read_visibility: \"private\" (default \u2014 only you can read/attach it) or\n            \"public\" (anyone can read/attach).\n        write_visibility: \"private\" (default \u2014 only you can edit it) or\n            \"public\" (anyone can edit). Must not be \"public\" while\n            read_visibility is \"private\".\n\n    Returns:\n        `{\"id\", \"type\", \"name\", \"read_visibility\", \"write_visibility\"}` of the\n        created reference.",
+      "input_schema": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "read_visibility": {
+            "default": "private",
+            "title": "Read Visibility",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "additionalProperties": true,
+            "title": "Value",
+            "type": "object"
+          },
+          "write_visibility": {
+            "default": "private",
+            "title": "Write Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "description",
+          "instructions",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    "create_room": {
+      "description": "Create a new Switch room.\n\n    Rooms are bridged by default: omitting `bridge_id` uses the instance's\n    default bridge (on a standalone deployment, the bundled Mattermost), so the\n    room is readable by humans without the caller knowing the deployment's\n    topology. Pass `bridge_id` to choose a specific bridge \u2014 call\n    `list_bridges` to discover ids and present the choice to the user. Pass\n    `internal_only=True` for an agent-only room with no external channel.\n\n    If the instance has no default bridge configured and you omit `bridge_id`,\n    the room is created internal-only.\n\n    Args:\n        name: Display name for the room.\n        description: Free-text description shown to participants.\n        agent_names: Names of agents to add to the room at creation. The\n            calling agent is not added automatically \u2014 include its name here\n            if it should join. Names must already exist in the registry.\n        user_names: Optional list of people to add, each named by their\n            username on the room's messaging app, or by the e-mail address of\n            their account there (not on Discord, which never shares e-mail\n            addresses); their Switch name does not resolve. Your\n            owner's usernames are in `get_my_context` (`messaging_apps`,\n            `your_usernames`). Only meaningful for bridged rooms.\n        channel_type: One of \"channel_public\", \"channel_private\", or \"direct\".\n            Required when `bridge_id` is set; ignored for internal-only rooms.\n            Use \"direct\" to open a 1:1 DM room \u2014 exactly one entry in\n            `agent_names` and one in `user_names`. On Slack this is provisioned\n            as a private channel with that user invited; the user must already\n            be known to Switch on the bridge (creation fails otherwise).\n        bridge_id: Optional id of the collaboration bridge backing this room.\n            Omit to use the instance's default bridge.\n        internal_only: Create a room with no external channel, opting out of\n            the default bridge. Ignored when `bridge_id` is set.\n        admin_mode: When true, the room is created in administrative mode.\n        security_config: Optional dict overriding default protection checks.\n        instructions: Room-specific system prompt / guidance shown to agents\n            when they connect.\n        reference_ids: References to attach at creation. Authorization is\n            checked against the calling agent's owner; you can only attach\n            references your owning user has access to.\n        package_ids: Packages to attach at creation. Same authorization as\n            references.\n        linked_rooms: Directed links from this room to existing rooms. Each\n            entry is `{\"target_room_id\": \"...\", \"label\": \"...\"}`.\n        read_visibility: \"public\" (anyone may read) or \"private\" (owner/admin\n            only). Defaults to \"public\".\n        write_visibility: \"public\" (anyone may modify \u2014 invite, attach, edit)\n            or \"private\" (owner/admin only). Defaults to \"public\". Must not be\n            \"public\" while read_visibility is \"private\".\n        group_name: Optional name of an existing room group to file this room\n            under (a navigation/visualization layer surfaced in the room list\n            and graph). Must match an existing group exactly; errors if unknown\n            or ambiguous. Omit to leave the room standalone.\n        roles: Optional room-roles to define at creation. Each entry is\n            `{\"name\": \"...\", \"instructions\": \"...\", \"exclusive\": bool}`.\n            Roles are assumable instruction bundles agents pick up with\n            `assume_role`; exclusive roles allow at most one live holder.\n        include_subagents_for: Per-agent opt-in. A subset of `agent_names`\n            whose subagents (child agents \u2014 e.g. a Claude Code agent's\n            registered `.claude/agents` subagents) should also be added to the\n            room. Only the named parents are expanded, not every agent.\n        join_event_listeners: Per-agent opt-in. A subset of `agent_names` that\n            should receive `room_join` events in this room (fired when someone\n            joins). Agents not listed do not receive them. Use for a welcome /\n            onboarding agent that should greet new arrivals.\n        aliases: Optional per-room agent aliases, keyed by agent name \u2192 alias.\n            `@<alias>` then addresses that agent in the room exactly like its\n            real name. Each agent must be in `agent_names`; an alias may\n            contain only letters, digits, '.', '-', '_' and must not clash\n            with an agent's real name, a room role, or another alias.\n\n    Returns:\n        `{\"id\", \"name\", \"matrix_room_id\", \"failed_attachments\": [...]}`.\n        `failed_attachments` is empty on full success; otherwise it lists\n        `{kind, id, error}` for each attachment that could not be applied\n        after the room was created (race-time failures only; predictable\n        errors like missing ids abort creation upfront).",
+      "input_schema": {
+        "properties": {
+          "admin_mode": {
+            "default": false,
+            "title": "Admin Mode",
+            "type": "boolean"
+          },
+          "agent_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agent Names",
+            "type": "array"
+          },
+          "aliases": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Aliases"
+          },
+          "bridge_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bridge Id"
+          },
+          "channel_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Channel Type"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "group_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Group Name"
+          },
+          "include_subagents_for": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Include Subagents For"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "internal_only": {
+            "default": false,
+            "title": "Internal Only",
+            "type": "boolean"
+          },
+          "join_event_listeners": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Join Event Listeners"
+          },
+          "linked_rooms": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Linked Rooms"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "package_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Package Ids"
+          },
+          "read_visibility": {
+            "default": "public",
+            "title": "Read Visibility",
+            "type": "string"
+          },
+          "reference_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference Ids"
+          },
+          "roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Roles"
+          },
+          "security_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Security Config"
+          },
+          "user_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Names"
+          },
+          "write_visibility": {
+            "default": "public",
+            "title": "Write Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "agent_names"
+        ],
+        "type": "object"
+      }
+    },
+    "create_room_document": {
+      "description": "Create a new internal document scoped to the connected room.\n\n    The document lives only in this room, is visible to all participants,\n    and never appears in the global resources library. Only you (the creating\n    agent) can later update or delete it via `update_room_document` /\n    `delete_room_document`. Other room members can read it via\n    `load_internal_documents`, and human users can delete it from the room UI.\n\n    Args:\n        name: Short identifier for the document. Must be unique within this room.\n        description: One-line summary (shown in pickers and listings).\n        instructions: Agent-facing notes on when/how to use this document.\n        content: Full text content (max 1 MiB).\n\n    Returns:\n        ``{\"document_id\": \"...\"}``.",
+      "input_schema": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "instructions",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "create_room_from_yaml": {
+      "description": "Provision a room, or a group of rooms, from a YAML template; a\n    ``version: 2`` document creates its agents too, as ``run_template`` does.\n\n    The agent-side mirror of the gateway's ``POST /rooms/from-yaml``: the\n    document is parsed, its ``params:`` resolved from ``inputs``, and the\n    result provisioned as the calling agent's owner (an ownerless agent\n    cannot provision rooms). Server-provided ``{$creator}`` names the owner.\n\n    A ``kickoff:`` is posted with your authority, not your owner's, and with\n    the run so far appended: the rooms that led here and who made them. The\n    call is refused, with nothing created, when the kickoff mentions an agent\n    that does not accept messages from you, when you ask for a room with the\n    same kickoff as one you already made further up the same path (the run is\n    then paused until your owner lets it continue), when the run was paused\n    or stopped, or while another room you asked for is still being created.\n    The refusal says which, and what to do.\n\n    Args:\n        yaml: The template text. A top-level ``room:`` makes one room; a\n            ``group:`` with a ``rooms:`` list (and optional ``links:``) makes\n            a room group. Either may declare ``params:`` with defaults and\n            descriptions; placeholders are filled in before provisioning.\n        inputs: Values for declared params. A required param with no default\n            must be supplied here, or provisioning fails naming it.\n\n    Returns:\n        For a room: ``{room_id, room_name, attached_reference_ids,\n        created_reference_ids, created_document_ids, role_names,\n        failed_attachments}``. For a group: ``{group_id, group_name,\n        rooms: [...], errors: [...]}``.",
+      "input_schema": {
+        "properties": {
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Inputs"
+          },
+          "yaml": {
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml"
+        ],
+        "type": "object"
+      }
+    },
+    "create_room_group": {
+      "description": "Create a new room group (a navigation/organization layer for rooms).\n\n    A room group is a named bucket that rooms can be filed under (via\n    `create_room`'s `group_name`), and groups can nest under a parent group to\n    form a tree. Creating a group does not move any rooms into it.\n\n    Args:\n        name: The group's display name.\n        description: Optional free-text description.\n        color: Optional UI colour hint (e.g. a hex string).\n        parent_group_name: Optional name of an existing group to nest this one\n            under. Must match an existing group exactly; errors if unknown or\n            ambiguous. Omit to create a top-level group.\n\n    Returns:\n        {id, name, description, color, parent_group_id, room_count, path,\n        member_rooms, child_groups} for the new group (room_count 0, empty\n        member_rooms/child_groups). `path` is the root-first ancestry.",
+      "input_schema": {
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Color"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_group_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Group Name"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "define_role": {
+      "description": "Define a new role in the connected room. Requires write access to the room.\n\n    Args:\n        name: Role name, unique within the room (e.g. \"manager\", \"worker\").\n        instructions: The instruction bundle delivered when an agent assumes\n            this role.\n        exclusive: When true, at most one live agent may hold the role at a\n            time (a lease with auto-release). When false, unrestricted.",
+      "input_schema": {
+        "properties": {
+          "exclusive": {
+            "default": false,
+            "title": "Exclusive",
+            "type": "boolean"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "instructions"
+        ],
+        "type": "object"
+      }
+    },
+    "delete_role": {
+      "description": "Delete a role from the connected room (and any lease on it).\n\n    Requires write access to the room.",
+      "input_schema": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "delete_room_document": {
+      "description": "Delete a room-scoped document you created in the connected room.\n\n    Only the agent that created the document can delete it via MCP. Users\n    can also delete from the room UI as an admin escape hatch.",
+      "input_schema": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "type": "object"
+      }
+    },
+    "delete_template": {
+      "description": "Delete a template you saved. Templates saved by a person or another\n    agent cannot be deleted by you.\n\n    Returns:\n        ``{id, name}`` of the deleted template.",
+      "input_schema": {
+        "properties": {
+          "template_id": {
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id"
+        ],
+        "type": "object"
+      }
+    },
+    "edit_role": {
+      "description": "Edit a role's instructions and/or exclusivity. Requires write access.\n\n    Edits take effect on the next `assume_role`; any current holder keeps the\n    instructions it already received.",
+      "input_schema": {
+        "properties": {
+          "exclusive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exclusive"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "get_advanced_config": {
+      "description": "List the advanced settings a managed agent of this provider can carry.\n\n    Requires the \"can manage agents\" capability. These are the keys\n    `create_agent` and `update_agent_detail` accept in `advanced_config` for\n    the provider, the same \"Advanced configuration\" Switch Console offers.\n\n    Args:\n        provider: A provider's id, as `list_machines` reports it, such as\n            \"claude\" for Claude Code. An unknown id is refused with the ids\n            Switch runs.\n\n    Returns:\n        A list of fields, each {key, label, type, help, placeholder, options,\n        catalogue}. `type` is \"text\" or \"textarea\" (a string), \"number\",\n        \"boolean\", \"list\" (a list of strings) or \"select\" (one of `options`).\n        `options` is a select's choices, each {value, label}, the first being\n        {\"value\": \"\", ...}: that one means unset, so leave the key out rather\n        than sending \"\". `catalogue` is null, or {kind: \"model\"} for a model\n        name, or {kind: \"model-variant\", model_field} for a variant of the\n        model named by that field. An empty list means the provider has no\n        advanced settings. Leave a setting out of `advanced_config` to leave it\n        unset; never send null, \"\" or [].",
+      "input_schema": {
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "type": "object"
+      }
+    },
+    "get_agent_detail": {
+      "description": "Get full detail for an agent on this Switch instance.\n\n    Readable for any agent (not just your own). Use it to inspect another\n    agent's configuration, capabilities, room memberships, and live sessions.\n\n    Args:\n        agent_id: The target agent's id (from `list_participants` or\n            `list_all_rooms`/`get_room_detail`).\n\n    Returns:\n        {id, name, description, icon_url, display_name, connector_type,\n        connection_model, tool_count, model_count, owner_id, owner_name,\n        oauth_client_id, created_at, parent_agent_id, known_agent_type,\n        known_agent_options, agent_type, can_manage_agents,\n        integration_profile, tools, models, rooms, sessions, children}.\n        `icon_url` is null when the agent has no icon set. `display_name` is\n        null when the agent has no display name set; fall back to `name`.\n        Address agents by `name`; `display_name` routes nothing.\n        `can_manage_agents` is whether the agent's owner lets it list their\n        machines and create agents on them, where agent management runs.",
+      "input_schema": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "type": "object"
+      }
+    },
+    "get_my_context": {
+      "description": "Who you are talking for, and how their Switch is set up, in one read.\n\n    Call it at the start of a conversation in which you help someone set\n    something up or explain their setup, and again when what you need may have\n    changed. It reads the server as it is now. Shows only what your owner may\n    see: the workspace's messaging apps, and otherwise your owner's own\n    connections, agents and machines.\n\n    Returns:\n        {you, person, workspace, server, messaging_apps, services, agents,\n        machines}.\n\n        `you`: {name, can_manage_agents}, the agent making the call.\n        `person`: your owner, {name, email, workspace_role, workspace_admin,\n        runs_server}. `workspace_role` is \"owner\", \"admin\" or \"member\".\n        `workspace_admin` is whether they may set up messaging apps and invite\n        people: an owner or admin of the workspace, or the server's own\n        administrator, which `runs_server` marks.\n        `workspace`: {id, name, members}.\n        `server`: {kind, version, features}. `kind` is \"switch_cloud\",\n        \"managed_by_console\" (Switch Console runs it, on this computer or a\n        host it set up) or \"self_hosted\". `features` lists the feature flags\n        this server turned on.\n\n        `messaging_apps`: {connected, how_to_add}.\n        `connected` lists the workspace's messaging apps, each {id, platform,\n        name, status, is_default, installed_with, your_account_linked,\n        your_usernames}. `id` is the `bridge_id` that `create_room` takes.\n        `installed_with` is \"official_app\" (the Switch app, added with one\n        click) or \"own_app\" (an app someone created and pasted tokens from).\n        `your_account_linked` is whether your owner's account on that platform\n        is linked to their Switch user; until it is, agents that answer only\n        their owner do not recognise them there.\n        `your_usernames` are your owner's usernames on that app, empty until\n        their account is linked. People are named by these, never by their\n        Switch name, in `create_room`'s and `add_users_to_room`'s `user_names`\n        on a room on that app.\n        `how_to_add` lists every platform this server can connect, each\n        {platform, name, path, who}. `path` is \"official_app\" when this server\n        offers the Switch app for it (Add to Slack, or adding the bot to a\n        chat) and \"own_app\" when someone has to create an app on the\n        platform and paste its tokens. `who` is \"admins\" or \"anyone\".\n\n        `services`: what agents can be given access to (GitHub and the like),\n        each {slug, name, available, unavailable_reason, unavailable_code,\n        connection, agents_using}. `available` is whether this server has it\n        set up; `unavailable_code` says why not, one of \"switched_off\" (its\n        operator turned it off), \"needs_https\" (it can't work on this\n        server), \"app_not_set_up\" (its operator can set it up under Admin \u2192\n        Connector apps in Switch Console), \"not_set_up\" or\n        \"not_fully_set_up\";\n        `connection` is your owner's: \"not_connected\", \"active\",\n        \"needs_reauthorization\" or \"error\". `agents_using` names your owner's\n        agents granted it. Empty when this server has service connections off.\n\n        `agents`: your owner's agents, each {id, name, display_name,\n        who_can_talk, can_manage_agents, services, managed}. `who_can_talk`\n        is \"owner_only\", \"owner_and_owner_agents\", \"anyone\" or \"custom\".\n        `managed` is null for an agent Switch does not run on a machine, else\n        {machine, desired_state, auto_mode, auto_approve, process}.\n        `auto_mode` is whether the provider's automatic review decides which\n        actions need approval; `auto_approve` is bypass, running every tool\n        without asking anyone whatever `auto_mode` says.\n\n        `machines`: your owner's machines as `list_machines` reports them, or\n        null when this server does not run agent management.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "get_role_detail": {
+      "description": "Get one room role's FULL untruncated instructions.\n\n    `list_roles` and `get_room_detail` only expose a 200-char\n    `instructions_preview`; use this when you need a role's complete\n    instructions \u2014 e.g. before assuming it. You must be a member of the room\n    (it does not have to be the room your session is currently connected to).\n\n    Args:\n        room_id: The Switch room id (UUID string).\n        role_name: The exact role name (as shown by `list_roles`).\n\n    Returns:\n        {name, exclusive, instructions (the FULL untruncated bundle),\n        held_by (live holder objects {name, present_here, session_room}), and\n        assumable_by_me}. The `held_by` and `assumable_by_me` fields carry the\n        same semantics as `list_roles`. Raises if no such role exists in the\n        room, or if you are not a member.",
+      "input_schema": {
+        "properties": {
+          "role_name": {
+            "title": "Role Name",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "role_name"
+        ],
+        "type": "object"
+      }
+    },
+    "get_room_detail": {
+      "description": "Get full detail for a room you are a member of.\n\n    You must be a member of the room (assigned to it); this does not have to\n    be the room your session is currently connected to. Fails with a\n    permission error if you are not a member.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n\n    Returns:\n        {id, name, description, channel_type, admin_mode, instructions,\n        matrix_room_id, created_at, bridge_id, bridge_display_name,\n        external_channel_id, group_id, group_name, group_path (the group's\n        root-first ancestry, e.g. \"Parent / Child\"; null when standalone),\n        agent_names, agent_statuses (keyed by agent name), connected_user_names,\n        aliases (per-room agent aliases, keyed by agent name \u2192 alias),\n        roles (the room's assumable roles, mirroring list_roles: each entry has\n        name, exclusive, instructions_preview, held_by (holder objects with\n        presence), and assumable_by_me)}.",
+      "input_schema": {
+        "properties": {
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "type": "object"
+      }
+    },
+    "get_room_group_detail": {
+      "description": "Get full detail for a room group, including its members and children.\n\n    Args:\n        group_id: The room group's id (from `list_room_groups`).\n\n    Returns:\n        {id, name, description, color, parent_group_id, room_count, path,\n        member_rooms, child_groups}, where `path` is the group's root-first\n        ancestry (e.g. \"Parent / Child\"), `member_rooms` is the rooms directly\n        in this group as {id, name}, and `child_groups` is the immediate\n        subgroups as {id, name}.",
+      "input_schema": {
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id"
+        ],
+        "type": "object"
+      }
+    },
+    "get_template": {
+      "description": "Read one saved template: the document, the inputs it takes, and the\n    agents it would create.\n\n    Use it before ``run_template`` to know what to fill in. ``params`` are\n    the inputs (``required`` is as the template writes it; a param with no\n    default usually needs a value). ``agent_slots`` lists the agents an agent\n    or team template would create, as managed agents of your owner: each\n    slot's ``machine`` (or a ``machine`` param) says where it runs, and\n    ``provider``, ``model``, ``directory`` and ``connections`` what it is.\n    A slot with only a ``location`` (this computer or an SSH host) runs on\n    the machine of that name, or else the first online machine of your\n    owner's that can run it. ``allow_existing`` says whether an\n    existing agent may stand in for it instead (``run_template``'s\n    ``agents``).\n\n    Args:\n        template_id: The id from ``list_templates``.\n\n    Returns:\n        ``{id, name, description, kind, visibility, saved_by, can_edit,\n        params: [{name, type, description, default, required, if}],\n        agent_slots: [{name, description, allow_existing, provider, machine,\n        location, model, directory, connections: [{service, access,\n        repos}]}], content}``. Slot fields are as the template writes them,\n        ``{param}`` placeholders included (a setting a param says for every\n        agent shows as that ``{param}``); null where it says nothing.",
+      "input_schema": {
+        "properties": {
+          "template_id": {
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id"
+        ],
+        "type": "object"
+      }
+    },
+    "get_template_guide": {
+      "description": "How to write a template: the language, and the schema this server\n    checks documents against.\n\n    Read it before writing a document for ``create_room_from_yaml`` or\n    ``save_template``. ``guide`` explains the keys, params, placeholders and\n    kickoff with an example; ``schema`` is the JSON Schema of the room and\n    group documents the server accepts.\n\n    Returns:\n        ``{guide, schema}``.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "invite_agent_to_room": {
+      "description": "Invite an agent into an existing room by name.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n        agent_name: Registry name of the agent to add.\n        include_subagents: When true, also add the invited agent's subagents\n            (child agents \u2014 e.g. a Claude Code agent's registered\n            `.claude/agents` subagents).\n\n    Returns:\n        {\"ok\": true} on success.",
+      "input_schema": {
+        "properties": {
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "include_subagents": {
+            "default": false,
+            "title": "Include Subagents",
+            "type": "boolean"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "agent_name"
+        ],
+        "type": "object"
+      }
+    },
+    "link_rooms": {
+      "description": "Create a directed link from one room to another.\n\n    Links are advertised to agents connected to `source_room_id` via\n    the `linked_rooms` array, with the `label` you supply as the\n    relationship hint (e.g. \"support\", \"parent project\", \"depends on\").\n    Links are one-way; create the reverse link separately if you want\n    both directions.\n\n    Args:\n        source_room_id: The room the link is attached to (where the\n            pointer will appear).\n        target_room_id: The room the link points at.\n        label: Free-text relationship hint, shown to agents and humans.\n            Must not be empty.\n\n    Returns:\n        `{\"target_room_id\", \"target_room_name\", \"target_room_description\",\n        \"label\"}` for the freshly-created link.",
+      "input_schema": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source_room_id": {
+            "title": "Source Room Id",
+            "type": "string"
+          },
+          "target_room_id": {
+            "title": "Target Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_room_id",
+          "target_room_id",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "list_agents": {
+      "description": "List the agents registered on this Switch instance.\n\n    Unlike `list_participants` (which is scoped to the connected room), this\n    lists every agent on the instance. Use the optional filters to narrow the\n    result; they are ANDed together, and omitting one ignores it.\n\n    Args:\n        name_contains: Case-insensitive substring to match against agent names.\n        owner_name: Return only agents owned by the user with this exact name.\n        known_agent_type: Return only agents of this known-agent type (e.g.\n            \"claude-code\").\n\n    Returns:\n        A list of agent summaries (sorted by name), each\n        {id, name, description, icon_url, display_name, connector_type,\n        connection_model, tool_count, model_count, owner_id, owner_name,\n        oauth_client_id, created_at, parent_agent_id, known_agent_type,\n        known_agent_options}.\n        `icon_url` is null when the agent has no icon set. `display_name` is\n        null when the agent has no display name set; fall back to `name`.\n        Address agents by `name`: `display_name` is a human label that routes\n        nothing, and `name_contains` matches `name` alone.\n        Use `get_agent_detail` for the full detail of one agent.",
+      "input_schema": {
+        "properties": {
+          "known_agent_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Known Agent Type"
+          },
+          "name_contains": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name Contains"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Name"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "list_all_references": {
+      "description": "List every reference on this Switch instance your owner can read.\n\n    Unlike `list_references` (which is scoped to the connected room and shows\n    what is already attached there), this searches the whole instance, so it is\n    how you find the `reference_id` to pass to `attach_reference_to_room`. It\n    needs no room connection. Use the optional filters to narrow the result;\n    they are ANDed together, and omitting one ignores it.\n\n    Args:\n        name_contains: Case-insensitive substring to match against reference\n            names.\n        type: Return only references of this exact type slug (e.g. \"github\").\n            See `list_reference_types` for the types in use.\n        owner_name: Return only references owned by the user with this exact\n            name.\n\n    Returns:\n        A list of {id, type, name, description, owner_name, read_visibility,\n        write_visibility, created_at} dicts, newest first. When this session has\n        exactly one current room, each entry also carries\n        `attached_to_current_room` \u2014 false means you still need to attach it;\n        the key is absent when the session has no current room or spans several,\n        so a missing key never means \"not attached\".\n        `value` (the URLs / ids a reference points at) is deliberately omitted:\n        this is discovery. Attach the reference and call `list_references` to\n        get its `value`.",
+      "input_schema": {
+        "properties": {
+          "name_contains": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name Contains"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Name"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "list_all_rooms": {
+      "description": "List every room on this Switch instance (not just rooms this agent\n    is a member of). Use `list_rooms` instead to see only the rooms this\n    agent is assigned to.\n\n    Args:\n        include_archived: When false (default), archived rooms are omitted.\n            Set true to also include archived rooms (each carries\n            `archived: true`).\n\n    Returns:\n        List of {room_id, name, description, archived} dicts.",
+      "input_schema": {
+        "properties": {
+          "include_archived": {
+            "default": false,
+            "title": "Include Archived",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "list_bridges": {
+      "description": "List collaboration bridges available on this Switch instance.\n\n    Use this when creating a room and you need to pick a bridge \u2014 present\n    the list to the user and let them choose, rather than guessing.\n\n    Returns:\n        List of `{id, type, display_name, status, is_default,\n        can_create_channels}` dicts. Only `status` == \"active\" bridges are\n        usable for new rooms; others are shown for context. `is_default`\n        marks the bridge that `create_room` uses when no `bridge_id` is given\n        (at most one).\n\n        `can_create_channels` is false when Switch cannot make a channel on\n        that bridge \u2014 either the platform has no such call (Telegram) or an\n        operator has withheld it. Creating a room on one of those fails, so\n        offer an existing channel instead: the chat is made on the platform,\n        the Switch app is added to it, and the room is adopted from that.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_linked_rooms": {
+      "description": "List the rooms linked from this session's connected room.\n\n    Returns the directed outbound links from the current room \u2014 each link\n    points at another Switch room and carries a free-text ``label`` set by\n    the room's operator (e.g. \"support\", \"parent project\", \"related\n    workstream\"). Pointers grant NO implicit access: the ``access`` field\n    tells you whether you (the calling agent) can act on the target \u2014\n    ``\"member\"`` means ``connect_to_room(target_room_id)`` will work,\n    ``\"not_member\"`` means you are not assigned to that room and the call\n    WILL fail until an operator adds you. ``not_member`` entries also\n    carry an ``access_note`` spelling that out.\n\n    Returns:\n        List of {target_room_id, target_room_name, target_room_description,\n        label, access, access_note?} dicts.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_machines": {
+      "description": "List your owner's machines: the computers that can run managed agents.\n\n    Requires the \"can manage agents\" capability, which your owner turns on for\n    you; without it the call is refused with a sentence to relay. Only your\n    owner's machines are listed, never anyone else's, and revoked (removed)\n    machines are left out.\n\n    Returns:\n        A list of machines, each {id, name, description, kind, state,\n        last_seen_at, providers, agents_running}.\n        `kind` is \"console\" (Switch Console's own machine), \"daemon\" (a\n        headless controller) or \"ec2\". `state` is \"online\" (connected to Switch\n        now), \"offline\" (was connected, and is not now: stopped, asleep, off\n        or disconnected) or \"unknown\" (has never connected).\n        `providers` lists the agent CLIs the machine last reported, each\n        {provider, installed, version, auth}, `auth` being \"ok\", \"missing\",\n        \"expired\" or \"unknown\". `agents_running` counts the managed agents\n        whose process the machine last reported as running, null before it\n        has reported. Pass a machine's `id` or exact `name` to `create_agent`.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_managed_agents": {
+      "description": "List your owner's managed agents: where each runs, and whether it is up.\n\n    Requires the \"can manage agents\" capability. Use it to check that an agent\n    you created with `create_agent` came up.\n\n    Returns:\n        A list of managed agents, each {agent_id, name, display_name,\n        description, provider, model, advanced_config, auto_mode,\n        auto_approve, directory, machine, desired_state, actual, revision}.\n        `auto_mode` is whether the provider's automatic review decides which\n        actions need a person's approval. `auto_approve` is bypass: it runs\n        every tool without asking anyone, whatever `auto_mode` says.\n        `directory` is the working directory the definition names (null only\n        when its machine has not said where it keeps workspaces).\n        `machine` is {id, name, state} (null when the agent is not placed on\n        a machine), `state` being \"online\", \"offline\", \"unknown\" or \"revoked\".\n        `desired_state` is what your owner wants: \"running\" or \"stopped\".\n        `actual` is what the machine last reported for the agent,\n        {process, reason, detail, applied_revision, since, directory}, or\n        null before it has reported on it; `process` is one of \"pending\",\n        \"starting\", \"running\", \"stopping\", \"stopped\", \"crashed\" or \"failed\",\n        and `reason` says why when it is crashed or failed. `actual.directory`\n        is where it runs, null until the machine has resolved it. `revision` is the\n        definition's revision: the agent runs the current definition once\n        `actual.applied_revision` equals it.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_participants": {
+      "description": "List agents and users in the connected room.\n\n    Args:\n        (none) \u2014 operates on the session's currently connected room. Call\n        connect_to_room first.\n\n    Returns:\n        List of {id, name, type, status, alias} dicts for each participant.\n        `status` and `alias` are null when unset.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_reference_types": {
+      "description": "List the Reference types you can use on this Switch instance.\n\n    The set is open and per-caller: it is the types built into Switch plus\n    the user-defined ones your owner can read, so another agent may see a\n    different list. Call this before `create_reference` and pick a `type`\n    from what it returns for you.\n\n    Returns:\n        List of `{type, display_name, instructions, value_schema,\n        value_hint, origin}`. `value_schema` is the JSON Schema for the\n        `value` dict `create_reference` expects, `value_hint` says what the\n        URLs in it should point at, and `origin` is `\"builtin\"` for a type\n        that ships with Switch or `\"user\"` for one someone defined here.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_references": {
+      "description": "List references, documents, and packages attached to this session's\n    connected room.\n\n    Returns:\n        {reference_types, references, documents, packages} \u2014 same shape as\n        the equivalent fields in `connect_to_room`. Use this to refresh\n        after attachments change mid-session.\n\n    External references carry their `value` inline (URLs / IDs); fetch the\n    underlying content using your own tools as described in\n    `reference_types[<type>].instructions`. An entry may instead carry\n    `\"missing\": true`, meaning that type could not be resolved on this\n    instance: treat its instructions as absent and say so rather than\n    guessing at how to use the reference.\n\n    Internal documents are advertised by id + description + instructions\n    only; call `load_internal_documents` to fetch their content.\n\n    Packages bundle other refs and documents and have their own\n    `instructions`; their `references` and `documents` arrays mirror the\n    same shape as the top-level fields.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_roles": {
+      "description": "List the roles defined in the connected room.\n\n    Roles are room-scoped, assumable instruction bundles. Each entry carries\n    `name`,\n    `exclusive`, an `instructions_preview`, `assumable_by_me` (whether you could\n    `assume_role` it right now), and `held_by` \u2014 the live holders (empty if\n    free, possibly several for a shared role). Each holder is an object\n    `{\"name\", \"present_here\", \"session_room\"}`: `present_here` is True when that\n    holder's assuming session is connected to THIS room right now; otherwise\n    `session_room` names the room its session is currently attending (a lease\n    survives room hops, so a holder can be live but looking elsewhere), or is\n    null if no bound session can be located.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_room_groups": {
+      "description": "List the room groups on this Switch instance.\n\n    Room groups are a navigation/organization layer: a room can belong to a\n    group (or be standalone), and groups can nest under a parent group. Use\n    this to discover the group names you can pass as `group_name` to\n    `create_room`, or to understand how rooms are organized.\n\n    Returns:\n        List of {id, name, description, parent_group_id, room_count, path}\n        dicts, where `path` is the group's root-first ancestry (e.g.\n        \"Parent / Child\") and `room_count` is the number of rooms directly in\n        the group. Sorted by path.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "list_rooms": {
+      "description": "List rooms this agent is assigned to.\n\n    Args:\n        include_archived: When false (default), archived rooms are omitted so\n            the active list stays uncluttered. Set true to also include\n            archived rooms (each carries `archived: true`).\n\n    Returns:\n        List of {room_id, name, description, connected, archived} dicts.\n        `connected` is true for the room this session is currently connected\n        to (if any); `archived` is true for archived rooms.",
+      "input_schema": {
+        "properties": {
+          "include_archived": {
+            "default": false,
+            "title": "Include Archived",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "list_templates": {
+      "description": "List the templates saved on this workspace that you can use.\n\n    That is every shared template plus your owner's private ones. Each row\n    says who saved it (a person, or which agent) and ``can_edit``: whether\n    you may change or delete it, which is true only for templates you saved.\n\n    Args:\n        query: Only templates whose name or description contains this.\n        kind: Only this kind: ``room``, ``group`` or ``agent``.\n\n    Returns:\n        ``[{id, name, description, kind, visibility, saved_by, can_edit}]``,\n        newest first.",
+      "input_schema": {
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kind"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Query"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "load_internal_documents": {
+      "description": "Load the content of internal documents attached to the connected room.\n\n    Args:\n        ids: List of document ids to load (from `documents[*].id` in the\n            connect payload or `list_references`).\n\n    Returns:\n        List of {id, description, content} entries in the same order as\n        the requested ids. Raises an error if any id is not attached to the\n        current room.",
+      "input_schema": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      }
+    },
+    "post_message": {
+      "description": "Send a message to the connected room (broadcast, no specific recipient).\n\n    Args:\n        body: The message text to send. Plain string \u2014 do not wrap in JSON or\n            prefix with `@name` (use send_targeted_message for addressed\n            messages). The room is implicit: messages go to the room this\n            session is currently connected to via connect_to_room, so there\n            is no `room_id` parameter.\n        thread_id: Optional. The `id` of a message to reply into, making this a\n            threaded reply. Pass any message id from the thread (a root or a\n            reply) \u2014 it is normalised to the thread root. Omit for a top-level\n            message. Get ids from read_context or from a notification's\n            thread_id.\n\n    Returns:\n        {\"event_id\": \"<event id>\"} for the posted message.",
+      "input_schema": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Thread Id"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "type": "object"
+      }
+    },
+    "read_context": {
+      "description": "Get a room's conversation timeline, grouped into threads.\n\n    Returns::\n\n        {\"threads\": [...], \"truncated\": bool, \"oldest_timestamp\": int|None}\n\n    `threads` is a list of thread groups ordered by latest activity (most-\n    recently active LAST, so the tail is the freshest), each shaped as::\n\n        {\"root\": <entry>, \"replies\": [<entry>, ...]}\n\n    where <entry> is {\"id\", \"kind\", \"sender\", \"sender_name\", \"body\",\n    \"timestamp\", \"attachments\"}. Top-level entries are roots with an empty\n    `replies` list; replies are oldest-first within a thread. Use a root's (or\n    any entry's) `id` as the `thread_id` argument to post_message /\n    send_targeted_message to reply into that thread.\n\n    `kind` is \"message\" for something a participant said, or \"room_join\" for\n    someone arriving in the room (body reads \"<name> joined the room\"). Joins\n    are part of the timeline so the history explains who appeared and when.\n\n    **`truncated` matters.** It is True when older history exists that this\n    call did not reach \u2014 you are looking at a partial conversation. Widen\n    `limit`, or page backwards with `before`, before concluding you have the\n    full picture. `oldest_timestamp` marks where to resume, but it is epoch\n    milliseconds while `before` is parsed as ISO-8601: convert it rather than\n    passing it straight back. `truncated` is exact: a read that ends exactly on\n    `limit` with nothing older behind it reports False.\n\n    `attachments` is a (usually empty) list of files on the message, each\n    {\"filename\", \"mimetype\", \"size\", \"mxc\", \"msgtype\"}. Any file type can\n    appear, and a message may carry several. To actually view one, pass its\n    `mxc` to the `download_attachment` tool, which fetches it to a local file\n    you can read.\n\n    Args:\n        limit: Maximum number of timeline entries to return (default 50),\n            grouped into threads. History is read from the room's stored\n            messages until this many are collected or the room's start is\n            reached.\n        since: ISO-8601 timestamp string (e.g. \"2026-05-20T20:55:00Z\"). Only\n            entries at or after this time are returned. Use this when an event\n            arrives to fetch just the recent context \u2014 pass a timestamp a few\n            minutes before the event ts. None = no lower bound.\n        before: ISO-8601 timestamp string. Only entries strictly before this\n            time are returned; history is paged backwards to reach them, so\n            this genuinely walks into older history. Combine with `since` to\n            page through a window. None = no upper bound.\n        room_id: Which room to read. Omit it \u2014 the usual case \u2014 and the\n            session's currently connected room is read; that read fails if\n            you are not connected to one. Pass a room id to read ANY room you\n            are a member of WITHOUT connecting to it, so you can catch up on\n            another room while staying where you are. Membership is the\n            boundary and is checked here: reading a room you do not belong to\n            is refused. A cross-room read does not change which room you are\n            connected to, and does not clear that room's unread count.",
+      "input_schema": {
+        "properties": {
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Before"
+          },
+          "limit": {
+            "default": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "room_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Room Id"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Since"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "release_role": {
+      "description": "Release the role you currently hold, freeing it for others. Idempotent.",
+      "input_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "remove_agent_from_room": {
+      "description": "Remove an agent from a room by name \u2014 the opposite of `invite_agent_to_room`.\n\n    The agent leaves the room and any bridged channel; a session it had\n    connected there is disconnected from it. You need not be in the room.\n\n    Allowed when you may address that agent (its addressing policy admits\n    you), or when you can manage agents and it belongs to your owner. Anything\n    else is refused with the reason \u2014 relay it rather than retrying.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n        agent_name: Registry name of the agent to remove (its `name`, not its\n            display name).\n\n    Returns:\n        {\"ok\": true} on success.",
+      "input_schema": {
+        "properties": {
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "agent_name"
+        ],
+        "type": "object"
+      }
+    },
+    "remove_agent_service": {
+      "description": "Take away one of your owner's agents' access to a service.\n\n    What was issued under the grant is revoked. Propose it and wait for a yes,\n    as for `set_agent_service`. Requires the \"can manage agents\" capability,\n    and reaches only your owner's own agents, never yourself.\n\n    Args:\n        agent_name: The agent, by its name.\n        service: The service's slug (\"github\").\n\n    Returns:\n        {agent, service, warning}: `warning` is set when some issued access\n        could not be revoked yet; Switch keeps trying.",
+      "input_schema": {
+        "properties": {
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_name",
+          "service"
+        ],
+        "type": "object"
+      }
+    },
+    "request_agent_deletion": {
+      "description": "Ask for another agent of your owner's to be deleted. Nothing is deleted\n    by this call: a person has to confirm.\n\n    Requires the \"can manage agents\" capability. The request is posted in the\n    room you are connected to, and only the agent's owner or a workspace admin\n    can carry it out, by replying `!delete-agent <name> confirm` within two\n    minutes; otherwise it lapses. Confirm with the person asking before you\n    call this, and tell them what to send.\n\n    Refused for an agent of another owner, yourself, an agent that can manage\n    agents, and one a server connector found.\n\n    Args:\n        agent_id: The agent to delete (`id` from `list_agents`).\n\n    Returns:\n        {\"agent_name\", \"status\": \"awaiting_confirmation\", \"confirm_with\",\n        \"expires_in_seconds\"}.",
+      "input_schema": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "type": "object"
+      }
+    },
+    "run_template": {
+      "description": "Create the agents and rooms a saved template describes, as you, the\n    same way ``create_room_from_yaml`` does with a document you write.\n\n    Everything ``create_room_from_yaml`` says about kickoffs and refusals\n    applies here too, and the run is listed under the template's name in\n    Switch Console.\n\n    An agent or team template creates its agents as managed agents of your\n    owner, each on the machine its entry names (``machine:`` or a ``machine``\n    param), before the rooms. That needs agent management on this server and\n    the \"can manage agents\" capability, and each machine online with the\n    provider installed and logged in. Everything is checked first: when\n    anything would fail, nothing is created and the refusal lists every\n    problem with its reason code. If the rooms then fail, the agents created\n    are deleted again. Confirm what will be created with the person asking\n    first: it starts real agents on their machines.\n\n    Args:\n        template_id: The id from ``list_templates``.\n        inputs: Values for the template's params (see ``get_template``),\n            including a ``machine`` or ``provider`` param.\n        agents: Existing agents to stand in for slots instead of creating\n            them, ``{slot name: agent name}``, the slot named as\n            ``get_template`` lists it or as it reads with your inputs. Only a\n            slot whose entry says ``allow_existing: true`` takes one.\n\n    Returns:\n        As ``create_room_from_yaml``: for a room ``{room_id, room_name, ...}``,\n        for a group ``{group_id, group_name, rooms, errors}``; plus, when it\n        created agents, ``created_agents``: each ``{slot, agent_id, name,\n        machine, listening}``, ``listening`` false when the agent was not\n        taking events before its rooms were made, so the kickoff may not have\n        reached it. Check them with ``list_managed_agents`` as after\n        ``create_agent``. A template with no room returns only\n        ``created_agents``.",
+      "input_schema": {
+        "properties": {
+          "agents": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Agents"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Inputs"
+          },
+          "template_id": {
+            "title": "Template Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id"
+        ],
+        "type": "object"
+      }
+    },
+    "save_template": {
+      "description": "Save a template to this workspace, so it can be found and run again.\n\n    It is saved for your owner and marked as saved by you; only you can\n    change or delete it afterwards. Its kind (room, group or agent) is read\n    from the document.\n\n    Args:\n        name: A name your owner does not already use for a template.\n        description: One line on what it creates.\n        yaml: The template document, as ``create_room_from_yaml`` takes it.\n        visibility: ``private`` (only your owner sees it) or ``shared``\n            (everyone on the workspace sees it, only you change it).\n        bypass_warnings: Leave false. A document with warnings, such as an\n            agent it never says which provider runs, is then refused and the\n            warnings listed, so you can fix them or advise whoever asked\n            first. Set true only to save it anyway: Switch Console will not\n            create an agent from it until what a warning names is fixed.\n\n    Returns:\n        ``{id, name, kind, visibility, warnings}``. ``warnings`` lists what\n        was saved past with ``bypass_warnings``; empty otherwise.",
+      "input_schema": {
+        "properties": {
+          "bypass_warnings": {
+            "default": false,
+            "title": "Bypass Warnings",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "private",
+            "title": "Visibility",
+            "type": "string"
+          },
+          "yaml": {
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "yaml"
+        ],
+        "type": "object"
+      }
+    },
+    "send_targeted_message": {
+      "description": "Send a message addressed to specific agents/users and/or roles.\n\n    Prepends `@name` for each name target and `@role` for each role target so\n    they receive it as an addressed event. Other participants still see the\n    message as room context. Use when you need specific participants to act,\n    such as a question, a nudge or a handoff.\n\n    Args:\n        body: The message text. Plain string \u2014 do not pre-add `@` prefixes;\n            this tool adds them for each target.\n        target_names: Agent or user names (the `name` field from\n            list_participants, not ids) to address. Prepended as `@name`.\n            The reserved name `everyone` is a room-wide mention: it notifies\n            every person in the room on its chat platform (`@channel` on Slack\n            and Mattermost, `@everyone` on Discord) and wakes no agent. Use it\n            only when every person there genuinely needs to see the message.\n            It cannot go in a thread: the platforms only page the whole room\n            from a top-level message.\n        target_roles: Role names (from list_roles) to address. Each is\n            prepended as `@role` and fans out to every live holder of that\n            role \u2014 the single holder for an exclusive role, all current\n            holders for a shared one. Use this to reach \"whoever holds the\n            manager role\" without naming the agent.\n        thread_id: Optional. The `id` of a message to reply into, making this a\n            threaded reply. Pass any message id from the thread \u2014 it is\n            normalised to the thread root. Omit for a top-level message.\n\n    At least one of target_names / target_roles is required.\n\n    Returns:\n        {\"event_id\": \"<event id>\", \"target_statuses\": {name: status}}.\n        `target_statuses` reports each addressed *agent*'s reachability at send\n        time \u2014 for a role target, that is each of its live holders: `live`\n        (will receive immediately), `awaiting_manual_poll` (must read context\n        to see it), `no_session`/`disconnected` (not reachable; may not see the\n        message until they reconnect). User targets are omitted \u2014 their\n        reachability is the collaboration bridge's concern. A role with no live\n        holder contributes no entries.\n\n        `not_permitted` is the one status that is not about reachability: that\n        agent's addressing policy does not admit you. The message is still\n        sent, and it will answer in the room saying it cannot act on it \u2014 so\n        read its reply rather than treating this as a failed send. Reaching it\n        another way is a matter for whoever owns it, not for a retry.\n\n        A room-wide mention reports under `everyone`: `sent` (the platform\n        pages the room, or \u2014 on Telegram \u2014 already notifies every member of\n        every message), `unsupported` (the platform has no channel-wide\n        mention a bot can send, as on Teams; the message still posts),\n        `no_bridge` (the room has no chat platform) or `bridge_unavailable`\n        (its bridge is down or has no channel for the room, so the message\n        never reaches the platform). It says what Switch sent, not what the\n        platform confirmed.",
+      "input_schema": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "target_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Target Names"
+          },
+          "target_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Target Roles"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Thread Id"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "type": "object"
+      }
+    },
+    "set_agent_service": {
+      "description": "Give one of your owner's agents access to a service your owner connected.\n\n    The agent then uses your owner's own connection to the service (their\n    GitHub, their Atlassian\u2026), within what this grant allows. Replaces any\n    grant the agent already has on that service. Propose it to your owner and\n    wait for a yes before calling: it hands their access to another agent.\n\n    Requires the \"can manage agents\" capability. Only your owner's own agents,\n    never yourself, and only services your owner has connected\n    (`get_my_context` lists both).\n    Some services need a choice only a person can make, such as which GitHub\n    repositories: when the refusal says so, link your owner to the agent's\n    Connections tab (`switchdash://open/agent/<agent-id>?tab=connections`), where\n    Switch Console asks for it.\n\n    Args:\n        agent_name: The agent to give access to, by its name.\n        service: The service's slug, as `get_my_context` lists it (\"github\").\n        access: \"read\" or \"write\"; omit for read. Leave it out for a service\n            that is on or off and reaches what your owner's connection does.\n        resources: What the service needs to know about the grant's reach;\n            omit unless a refusal asked for something.\n\n    Returns:\n        {agent, service, access, summary, warning}: `summary` says in a\n        sentence what the agent can now do; `warning` is set when access the\n        previous grant gave could not all be revoked yet.",
+      "input_schema": {
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Access"
+          },
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "resources": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resources"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_name",
+          "service"
+        ],
+        "type": "object"
+      }
+    },
+    "unarchive_room": {
+      "description": "Unarchive a room you are a member of, restoring it to the default\n    active room lists.\n\n    The inverse of `archive_room`. You must be a member of the room and have\n    write access to it; fails with a permission error otherwise.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n\n    Returns:\n        The full, updated room detail (same shape as get_room_detail).",
+      "input_schema": {
+        "properties": {
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "type": "object"
+      }
+    },
+    "unlink_rooms": {
+      "description": "Remove a directed link from one room to another.\n\n    The inverse of `link_rooms`: detaches the existing pointer from\n    `source_room_id` to `target_room_id` so it no longer appears in the\n    source room's `linked_rooms` array. Links are one-way, so this only\n    removes the `source_room_id \u2192 target_room_id` direction; remove the\n    reverse link separately if one exists.\n\n    Args:\n        source_room_id: The room the link is attached to (where the\n            pointer currently appears).\n        target_room_id: The room the link points at.\n\n    Returns:\n        `{\"ok\": true}` on success. Raises an error if no such link\n        exists.",
+      "input_schema": {
+        "properties": {
+          "source_room_id": {
+            "title": "Source Room Id",
+            "type": "string"
+          },
+          "target_room_id": {
+            "title": "Target Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_room_id",
+          "target_room_id"
+        ],
+        "type": "object"
+      }
+    },
+    "update_agent_detail": {
+      "description": "Change an agent your owner owns, and return its fresh detail.\n\n    Owner-only: the agent's owner must be your own owner (a permission error\n    otherwise), and never yourself: your own settings are your owner's to\n    change, in Switch Console. Omit a field to leave it unchanged.\n\n    Any agent:\n        name: Rename it: the identifier people type and mention (lowercase\n            letters, digits, '.', '-', '_'). Requires the \"can manage agents\"\n            capability, like the managed fields below; without it the call is\n            refused with a sentence to relay. Pass `display_name` with it when\n            the label is the name written out (\"Notes Writer\" for\n            notes-writer); otherwise the label stays. Rooms, roles, aliases and\n            credentials follow; its handle on each chat platform is renamed\n            too. Refused for a name in use, one that clashes with an alias or\n            role in its rooms or a handle on a chat platform, a subagent or a\n            parent of subagents, and an agent a server connector found.\n        description: What the agent is for.\n        display_name: Human label shown next to its name; \"\" clears it.\n        icon_url: An https link to its icon; \"\" clears it. A server with\n            third-party avatars off refuses one on dicebear.com or\n            ui-avatars.com.\n        addressing: Who can address it: \"owner_only\" (your owner alone, not\n            even their other agents, you included), \"owner_and_owner_agents\"\n            (your owner and any agent they own) or \"anyone\".\n\n    A managed agent (one `list_managed_agents` shows) only, and only with the\n    \"can manage agents\" capability:\n        provider: A provider's id, as `list_machines` reports it, such as\n            \"claude\" for Claude Code.\n        model: The model to run; \"\" for the provider's default.\n        advanced_config: The provider's advanced settings, replacing the\n            current ones whole, keyed by the fields `get_advanced_config`\n            lists, e.g. {\"effort\": \"high\"}; {} clears them. When changing\n            `provider`, pass the new provider's settings (or {}) too.\n        instructions: Its system prompt (at most 32 KiB).\n        auto_mode: Auto mode: the provider's own automatic review lets safe\n            actions run without asking and still asks a person before risky\n            ones. On by default for new agents.\n        auto_approve: Bypass mode: run every tool without any permission\n            check; overrides `auto_mode`. Unsafe; turn it on only when the\n            person explicitly asks.\n        directory: Working directory on its machine; \"\" for the machine's\n            own workspace for the agent, whose path Switch fills in.\n        isolation: \"shared\" (inside the machine's controller) or \"isolated\"\n            (a process of its own).\n        machine: Move it to this machine (`id` or exact `name` from\n            `list_machines`).\n        desired_state: \"running\" or \"stopped\".\n    The machine must be online with the provider installed and logged in;\n    otherwise nothing is changed and the error gives a reason code to relay.\n    Changes reach the agent's running sessions on their own, with no reset:\n    a session mid-turn picks them up when the turn ends, and a running\n    conversation is told its new instructions.\n\n    Returns:\n        The `get_agent_detail` shape plus `managed`: for a managed agent, the\n        entry `list_managed_agents` shows for it (provider, model,\n        advanced_config, auto_mode, auto_approve, machine, desired_state,\n        actual, revision); null when\n        the agent is not managed or you cannot manage agents. Plus `renamed`\n        when `name` changed it: `{old_name, bridge_failures,\n        templates_mentioning_old_name}` \u2014 each chat platform that could not be\n        updated yet (the rename stands; it catches up when its bridge next\n        starts), and saved templates whose text still says the old name.",
+      "input_schema": {
+        "properties": {
+          "addressing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Addressing"
+          },
+          "advanced_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Advanced Config"
+          },
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "auto_approve": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Auto Approve"
+          },
+          "auto_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Auto Mode"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "desired_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Desired State"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Directory"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Icon Url"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "isolation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Isolation"
+          },
+          "machine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Machine"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Model"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Provider"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "type": "object"
+      }
+    },
+    "update_room": {
+      "description": "Update attributes of a room you are a member of.\n\n    You must be a member of the room (assigned to it); fails with a\n    permission error otherwise. Only the fields you pass are changed \u2014\n    omit (leave as None) any attribute you want to keep unchanged.\n\n    Args:\n        room_id: The Switch room id (UUID string).\n        name: New room name, or None to leave unchanged.\n        description: New room description, or None to leave unchanged.\n        instructions: New room-specific instructions, or None to leave\n            unchanged.\n        admin_mode: New admin-mode flag, or None to leave unchanged.\n        join_event_listeners: Partial map of agent name \u2192 whether that agent\n            should receive `room_join` events in this room. Only the named\n            agents change; omit to leave all memberships unchanged. Each named\n            agent must already be a member of the room.\n        bridge_id: Move the room onto this collaboration bridge. A fresh\n            external channel is provisioned on the target bridge and the\n            room's current agents are re-added, then the old bridge is detached\n            (the old external channel is left in place on its platform but is\n            no longer synced). Human users are NOT carried over \u2014 their\n            identities are bridge-specific \u2014 so re-invite them to the new\n            channel manually. Call `list_bridges` for valid ids. Omit to leave\n            the room's bridge unchanged. This sets or moves a bridge only \u2014 it\n            cannot remove one.\n        channel_type: Visibility for the newly provisioned channel when\n            `bridge_id` is set \u2014 \"channel_public\" or \"channel_private\". Omit\n            to keep the room's current privacy. Ignored unless `bridge_id` is\n            given.\n        external_channel_id: Bind to this EXISTING channel on the target\n            bridge instead of provisioning a new one \u2014 e.g. to move a room\n            back onto a channel it previously used (channels are left in place\n            on a bridge change, so the old one still exists). The id must be a\n            real channel on the target bridge whose bridge bot is a member,\n            and one the bridge serves: a channel belonging to another Discord\n            server than the bridge's is refused. Ignored unless `bridge_id` is\n            given.\n        aliases: Per-room agent aliases to set, keyed by agent name \u2192 alias.\n            `@<alias>` then addresses that agent in the room like its real\n            name. Pass an empty string (\"\") as the value to clear an agent's\n            alias. Only the agents you name are touched; others keep their\n            current alias. An alias may contain only letters, digits, '.',\n            '-', '_' and must not clash with an agent's real name, a room\n            role, or another alias. Omit to leave aliases unchanged.\n\n    Returns:\n        The full, updated room detail (same shape as get_room_detail),\n        including the room's current `aliases` map.",
+      "input_schema": {
+        "properties": {
+          "admin_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Admin Mode"
+          },
+          "aliases": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Aliases"
+          },
+          "bridge_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bridge Id"
+          },
+          "channel_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Channel Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "external_channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "External Channel Id"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "join_event_listeners": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Join Event Listeners"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "type": "object"
+      }
+    },
+    "update_room_document": {
+      "description": "Update a room-scoped document you created in the connected room.\n\n    Only the agent that created the document can update it. Pass only the\n    fields you want to change; omit (or set to None) the others.",
+      "input_schema": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "type": "object"
+      }
+    },
+    "update_template": {
+      "description": "Change a template you saved. Only the fields you pass change.\n\n    Templates saved by a person, or by another agent, cannot be changed by\n    you; save your own version under another name instead.\n\n    A new ``yaml`` with warnings is refused unless ``bypass_warnings`` is\n    true, as in ``save_template``.\n\n    Returns:\n        ``{id, name, kind, visibility, version, warnings}``. ``warnings``\n        lists what was saved past with ``bypass_warnings``; empty otherwise.",
+      "input_schema": {
+        "properties": {
+          "bypass_warnings": {
+            "default": false,
+            "title": "Bypass Warnings",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "template_id": {
+            "title": "Template Id",
+            "type": "string"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visibility"
+          },
+          "yaml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Yaml"
+          }
+        },
+        "required": [
+          "template_id"
+        ],
+        "type": "object"
+      }
+    }
+  }
+}

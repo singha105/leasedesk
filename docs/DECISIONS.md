@@ -1,0 +1,51 @@
+# Decisions
+
+Dated log of choices, and of every place the live Switch server or docs disagree with docs/SPEC.md. Newest last.
+
+2026-11-03: Started Part 1 (foundation and protocol spikes). Repo lives at ~/leasedesk. Python 3.12.15 via uv 0.12.23; Switch target is Console 0.40.0 / server 0.31.0. Spec saved verbatim to docs/SPEC.md; this log records where reality differs instead of editing the spec.
+
+2026-11-03: Added the Switch docs MCP with `-s user` (user scope) instead of the default local scope, so it is available both from ~ (where this session runs) and from ~/leasedesk. It needs a new Claude Code session to load; until then docs are read from https://docs.switchagents.ai/*.md directly.
+
+2026-11-03: Added `pydantic-settings` (not in the spec's stack) so config reads env and .env with SecretStr for keys; it is the pydantic v2 way to do settings and avoids a hand-rolled .env parser.
+
+2026-11-03: parliament 1.6.4 imports `pkg_resources`, which setuptools 81+ no longer ships. Pinned `setuptools<81` as a runtime dependency; tests/test_deps.py fails if this breaks again.
+
+2026-11-03: Spikes in scripts/spikes/ call Switch with raw httpx/websockets on purpose: their job is to show raw wire data. The "every Switch call goes through leasedesk/switch/" rule applies to product code from Part 2 on.
+
+2026-11-03: Switch Console was not installed on this Mac and OrbStack (the Docker runtime here) was stopped, so Phase 3 starts with installing Console and starting Docker.
+
+2026-11-03: Docs say "Run a server on this computer" runs the full stack in Docker. Observed with Console 0.40.1: `runtime.json` says `native`; switch-core 0.31.0 and Postgres run as native processes under ~/Library/Application Support/switchdash/local-switch-server/, and only Mattermost (11.9.0) is a Docker container. Ports are picked at install and stored in that folder's ports.json (gateway 57636, api 57637, mattermost 57638, postgres 57639). The agent bridge base URL is the `api` port: http://localhost:57637 (GET /health -> 200 {"status":"ok"}). GATEWAY_PUBLIC_URL also points at 57637; Console opens the Gateway via "Full admin interface". health.py now reads ports.json, so a reinstall that moves ports is found again.
+
+2026-11-03: The local server's ID_SERVER_NAME is `localhost`, so participant ids should end in `:localhost` (to confirm in the spikes). Feature flags on: agent_management, agent_chats, switch_buddy, follow_the_conversation, service_connections. agent_management means Console moves Console-run agents (scribe, skeptic) onto a managed machine; the custom agents (keymaster, sentinel) connect over the protocol themselves.
+
+2026-11-03: The server's env file holds a deployment-wide bootstrap registration token. Not using it: agents registered with it belong to a dedicated non-admin account, while a Gateway registration key makes Arnab the owner, which addressing and permissions depend on. Never read that file's secret values.
+
+2026-11-03: AWS sandbox scripts (scripts/aws/). keymaster and sentinel get inline user policies (put-user-policy is idempotent and the policy dies with the user); the boundary is a customer-managed policy under /leasedesk-system/ because a permissions boundary must be a managed policy. Both scripts require an explicit `--profile` and never fall back to `default`. Access keys go from `create-access-key` straight into ~/.aws/credentials through write_profile.py (mode 600) and are never printed. The bucket suffix is random, stored in .state/aws-suffix, and reused by re-runs and by teardown. Teardown asks for a typed confirmation unless `--yes`.
+
+2026-11-03: Checked https://aws.amazon.com/iam/access-analyzer/pricing/ today. Policy validation (ValidatePolicy) is "no additional charge". Custom policy checks (CheckNoNewAccess, CheckAccessNotGranted, CheckNoPublicAccess) are billed at $0.0020 per API call, so they stay behind LEASEDESK_ENABLE_PAID_CHECKS=false. The unused-access analyzer costs $0.20 per IAM user or role per month; LeaseDesk never creates an analyzer. External access analysis is free.
+
+2026-11-03: Spec and docs say a person makes the registration key on the Gateway's API Keys page (Console: "Full admin interface"). Console 0.40.1 hides that button when `server.managed && managementKind === "local" && isNative` ("servesNoDashboard"), and 0.40 always runs the local server natively (it even moves Docker servers off Docker). So the local server has no Gateway web UI. The Gateway API is still served at /gateway on the bridge port (cookie `switch_auth` from POST /gateway/auth/login {email, password}); POST /gateway/api-keys {label} returns {id, label, key, created_at} and always makes a `registration` key. scripts/gateway.py (`key`) does this as the admin (Arnab), reading the admin login Console generated, and writes the key to .env without printing it. The same gap affects person-made library documents and packages (Part 4): they will go through the Gateway API as the admin, not a web page.
+
+2026-11-03: Live server vs spec/docs, from the first spikes (details in docs/PROTOCOL_NOTES.md):
+- `update_agent_detail` with the agent's own key is refused (403 "An agent can't change its own settings"). Addressing is set by the owner: `PUT /gateway/agents/{id}/addressing-policy` (`{"policy": null}` = anyone), via scripts/gateway.py. Part 2's `make register` needs that owner step for keymaster and sentinel.
+- New agents default to `addressing_policy` owner + owner_agents (matches the 0.31 changelog, not the older docs line "answers its owner and nobody else").
+- `post_message` takes `body` and `thread_id`; `POST /agents/{id}/message` takes `room_id` and `content`. Threads are keyed by the root message's `event_id` (`sw_…`).
+- There is no list-documents op: document metadata comes from `connect_to_room`, content from `load_internal_documents {ids}`. `update_room_document` replaces fields, so the append-only lease-ledger is rewritten in full on each change.
+- Registration auto-adds the agent to the bundled Mattermost rooms and Switch posts a greeting in its name.
+- Cursors are opaque large ints (a gap returned resumed_at = 2^53 − 2^32); store, never compute. connection_state carries an undocumented `position` map and protocol 9.
+- An agent's own posts are not echoed on its socket.
+- 18 ops exist that the docs catalog omits (create_agent, templates, machines, get_my_context, …); none are needed yet.
+
+2026-11-04: Discord set up. Bot "LeaseDesk Switch" (app 1567400687627796602) added to Arnab's server LeaseDesk Demo (guild 1567399223836811374), and channel #leasedesk-scratch created. In Console: Connect → Discord with agent name autocomplete and channel creation on, then Arnab's account linked ("This is me" for piggyback101). The first token pasted was rejected by Discord (bridge log: 401, "Improper token has been passed"), and Console can't edit a connection's token, so the broken connection was disconnected (it had no rooms) and connected again. Added scripts/check_discord_token.py, which checks a token from the clipboard (shape, owning bot id, GET /users/@me) without printing it, so a bad paste is caught before Console.
+
+2026-11-04: Live server vs spec/docs, from the Discord spikes (details in docs/PROTOCOL_NOTES.md):
+- Being invited to a room (`!invite-agent`) sends nothing to the agent's socket, and `scope=all` doesn't subscribe to new rooms. The agent must call `connect_to_room`, and that call replaces the connection's subscription instead of adding to it. Part 2 decides between one connection per room and the `rooms=` open parameter, and how keymaster notices new rooms (poll `list_rooms`).
+- `addressed` is the mention flag. `sender_role` ("owner") is set only on addressed messages. `missed.count` appears only on addressed messages.
+- Message `sender` ids (`@switch-discord-<bridge_id>-<username>:localhost`) differ from `list_participants` ids (UUIDs) and embed the bridge id, so they change whenever Discord is reconnected. Approver identity in Part 3 is matched on `sender`, read live, never hardcoded.
+- `send_targeted_message` targets are Switch display names (`piggyback101.`, with the trailing dot).
+- Attachments arrive as `{filename, mimetype, size, mxc, msgtype}`. Bytes come from `GET /agents/{id}/rooms/{room_id}/media?mxc=…`, an agent route missing from GET /ops. That route serves an `mxc` through any room the agent is in, not only the room where it was posted.
+- Console 0.40 has no documents UI for rooms. A person creates and attaches library docs only through the Gateway API (scripts/gateway.py library-doc).
+
+2026-11-04: AWS stays mock-only for Part 1 (Arnab's call). Everything runs with `LEASEDESK_AWS_MODE=mock` (moto); no IAM users, keys or buckets were made. scripts/aws/setup_sandbox.sh and teardown_sandbox.sh are written and checked with `--dry-run` only. The live run (`setup_sandbox.sh --profile <admin profile>`, then `aws sts get-caller-identity --profile leasedesk-keymaster` and the expected AccessDenied for lease-demo-dev) happens at the start of the part where keymaster first writes a real policy, so the long-lived sandbox keys exist only once they are used. The admin profile still has to be named then; the scripts never fall back to `default`.
+
+2026-11-04: Library-doc spike (scripts/gateway.py, run as the admin): a person-written doc is `scope: "global"`, `created_by_agent_id: null`. Agents can read it (`load_internal_documents`), but `update_room_document` on it returns 400 "Room-scoped document … not found in room …" and the content stays unchanged. So the spec's rule that agents can't edit people's documents is enforced by the server, as a 400 "not found" rather than a 403. Correction to the 2026-11-03 entry: `list_references` does list a room's documents (metadata only). The second-person message test is not done (no second Discord account yet). It moves to Part 3, which needs a second person for the approver flow anyway.
