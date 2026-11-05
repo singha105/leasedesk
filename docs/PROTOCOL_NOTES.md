@@ -464,3 +464,32 @@ bridge `36e05d34…` in place of `b45dbd45…`, so every Discord sender id chang
 reconnected. LeaseDesk's approver list must be re-read after any reconnect, never baked into config.
 Participant UUIDs from `list_participants` don't appear in message frames.
 PENDING: the second account's ids.
+
+## Part 2 live run (2026-11-05)
+
+### Gateway document update
+Observed: 2026-11-05 00:05
+Raw: `PUT /gateway/documents/{id} {"content": …}` → `405 {"detail":"Method Not Allowed"}`;
+`PATCH /gateway/documents/{id} {"content": …}` → `200`.
+Takeaways: a person edits a library document with PATCH. keymaster picked the change up on
+`@keymaster reload-policy` ("changed (hash …)").
+
+### Roles not defined in a room
+Observed: 2026-11-04 23:47
+Raw: `assume_role {"role": "executor"}` → `400 {"detail": "Role 'executor' not found in this room"}`.
+Takeaways: expected until rooms get roles (Part 4). keymaster retries every 60 s and on
+`subscription_changed`.
+
+### Targeted message to a role nobody holds
+Observed: 2026-11-05 00:00
+Raw: `send_targeted_message` with `target_roles: ["reviewer"]` → 400 (detail not captured).
+Takeaways: keymaster falls back to a plain post starting "@reviewer". Recheck once sentinel holds
+the reviewer role (Part 3).
+
+### Agent-created room document
+Observed: 2026-11-04 23:59
+Raw: `create_room_document` as keymaster → doc `scope: "room"`, `created_by_agent_id` = keymaster's
+agent UUID. Each create or update makes Switch post "📄 created/updated room document
+“lease-ledger”." in the channel in the agent's name.
+Takeaways: keymaster finds its own ledger by name plus `created_by_agent_id`. The notices are
+server behaviour; every ledger write shows up in the channel.

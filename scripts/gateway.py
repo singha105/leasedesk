@@ -30,6 +30,9 @@ import typer
 sys.path.insert(0, str(Path(__file__).resolve().parent / "spikes"))
 from _common import record
 
+from leasedesk.common import envfile
+from leasedesk.common.envfile import read_env_file
+
 ROOT = Path(__file__).resolve().parent.parent
 ENV = ROOT / ".env"
 AGENTS = ROOT / ".secrets" / "agents"
@@ -41,23 +44,8 @@ app = typer.Typer(add_completion=False)
 PROMPT = typer.Option(False, "--prompt", help="Type the admin email and password instead")
 
 
-def read_env_file(path: Path) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if "=" in line and not line.lstrip().startswith("#"):
-            k, _, v = line.partition("=")
-            out[k.strip()] = v.strip().strip('"').strip("'")
-    return out
-
-
 def set_env_value(name: str, value: str) -> None:
-    lines = ENV.read_text().splitlines() if ENV.exists() else []
-    out = [ln for ln in lines if not ln.startswith(f"{name}=")]
-    out.append(f"{name}={value}")
-    ENV.touch(mode=0o600, exist_ok=True)
-    ENV.chmod(0o600)
-    ENV.write_text("\n".join(out) + "\n")
-    ENV.chmod(0o600)
+    envfile.set_env_value(ENV, name, value)
 
 
 @contextmanager
@@ -169,6 +157,20 @@ def library_doc(
         for room_id in room:
             r = call(c, "attach_document", "POST", f"/rooms/{room_id}/documents/{doc_id}")
             typer.echo(f"  attach to {room_id}: HTTP {r.status_code}")
+
+
+@app.command("library-doc-update")
+def library_doc_update(
+    doc_id: str = typer.Option(...),
+    content_file: Path = typer.Option(..., exists=True, readable=True),  # noqa: B008
+    prompt: bool = PROMPT,
+) -> None:
+    """Replace a library document's content as the admin (PATCH /gateway/documents/{id})."""
+    with admin_session(prompt) as c:
+        body = {"content": content_file.read_text()}
+        r = call(c, "update_document", "PATCH", f"/documents/{doc_id}", body)
+        detail = "" if r.status_code < 300 else f" {r.text[:200]}"
+        typer.echo(f"update {doc_id}: HTTP {r.status_code}{detail}")
 
 
 if __name__ == "__main__":

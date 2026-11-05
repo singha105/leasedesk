@@ -15,10 +15,15 @@ Recorded server behaviour lives in [docs/PROTOCOL_NOTES.md](docs/PROTOCOL_NOTES.
 | `make setup` | `uv sync` with dev dependencies (Python 3.12) |
 | `make lint` | `ruff check`, `ruff format --check`, `mypy leasedesk/` |
 | `make test` | `pytest` |
-| `make up` | start the local stack for a demo (filled in by Part 2) |
+| `make up` | mock demo: moto in the background, keymaster in the foreground |
 | `make doctor` | check tools, env, server health and credential file modes |
+| `make register` | register keymaster and sentinel; keys go to `.secrets/agents/`, sender ids to `.env` |
+| `make moto` | mock AWS (moto server, IAM auth on); mock keys go to `.state/mock-aws.env` |
+| `make run-keymaster` | run keymaster alone (mock mode needs `make moto`) |
+| `make check-access` | demo helper: prints ALLOWED or DENIED for lease-demo-dev every 10 s |
+| `make e2e-mock` | end-to-end tests on moto (`pytest -m e2e`) |
 
-Other targets (`register`, `run-keymaster`, `run-sentinel`, `e2e-mock`) are stubs until the part that owns them.
+`run-sentinel` is a stub until Part 3.
 
 ## Conventions
 

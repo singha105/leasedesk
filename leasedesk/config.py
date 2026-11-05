@@ -30,6 +30,24 @@ class Settings(BaseSettings):
     sentinel_profile: str = Field(default="leasedesk-sentinel", alias="LEASEDESK_SENTINEL_PROFILE")
     enable_paid_checks: bool = Field(default=False, alias="LEASEDESK_ENABLE_PAID_CHECKS")
 
+    # keymaster
+    tz: str = Field(default="America/New_York", alias="LEASEDESK_TZ")
+    policy_source: Literal["document", "file"] = Field(
+        default="document", alias="LEASEDESK_POLICY_SOURCE"
+    )
+    policy_file: Path = Field(
+        default=Path("switch/docs/access-policy.yaml"), alias="LEASEDESK_POLICY_FILE"
+    )
+    policy_document_name: str = Field(default="access-policy", alias="LEASEDESK_POLICY_DOC")
+    dev_fake_verdict: Literal["LOW", "MEDIUM", "HIGH", "BLOCK"] | None = Field(
+        default=None, alias="LEASEDESK_DEV_FAKE_VERDICT"
+    )
+    dev_mode: bool = Field(default=False, alias="LEASEDESK_DEV_MODE")
+    moto_port: int = Field(default=5055, alias="LEASEDESK_MOTO_PORT")
+    db_path: Path = Field(default=Path(".state/keymaster.db"), alias="LEASEDESK_DB")
+    keymaster_id: str | None = Field(default=None, alias="LEASEDESK_KEYMASTER_ID")
+    sentinel_id: str | None = Field(default=None, alias="LEASEDESK_SENTINEL_ID")
+
     # Local
     state_dir: Path = Field(default=Path(".state"), alias="LEASEDESK_STATE_DIR")
     secrets_dir: Path = Field(default=Path(".secrets"), alias="LEASEDESK_SECRETS_DIR")

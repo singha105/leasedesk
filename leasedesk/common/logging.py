@@ -51,8 +51,14 @@ def redaction_processor(
     return {k: redact(v, k) for k, v in event_dict.items()}
 
 
+QUIET_LIBRARIES = ("httpx", "httpcore", "websockets")
+
+
 def configure_logging(level: str = "INFO") -> None:
     logging.basicConfig(format="%(message)s", level=level.upper())
+    # These log through plain stdlib logging, which skips the redaction processor.
+    for noisy in QUIET_LIBRARIES:
+        logging.getLogger(noisy).setLevel(max(logging.WARNING, logging.getLevelName(level.upper())))
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

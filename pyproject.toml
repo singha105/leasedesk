@@ -48,7 +48,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "SIM", "PTH"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106"]
+"tests/**" = ["S101", "S105", "S106", "ASYNC109"]
 "scripts/**" = ["S603", "S607"]
 
 [tool.mypy]
@@ -66,3 +66,4 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-q"
+markers = ["e2e: end-to-end tests against moto (make e2e-mock)"]

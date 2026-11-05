@@ -48,3 +48,14 @@ def test_log_lines_are_redacted(capsys: pytest.CaptureFixture[str]) -> None:
     assert record["api_key"] == REDACTED
     assert "sk-live-123" not in line
     structlog.reset_defaults()
+
+
+def test_library_loggers_quiet_below_warning() -> None:
+    """httpx/websockets log through plain stdlib logging, outside the redaction processor."""
+    import logging
+
+    from leasedesk.common.logging import configure_logging
+
+    configure_logging("INFO")
+    for name in ("httpx", "httpcore", "websockets"):
+        assert logging.getLogger(name).level >= logging.WARNING
