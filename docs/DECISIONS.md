@@ -202,3 +202,13 @@ All eight live scenarios passed after the fixes above; docs/SCENARIOS.md has the
 - The agent-origin approval gate was proved with the registered test agent `leasedesk-probe`, added to #access-desk for the test and removed after. scribe refuses to write an approval, so a real agent had to send one.
 - Skeptic was stopped and restarted through `PATCH /gateway/management/agents/{id}` (`desired_state`), the same call the Console's switch makes. keymaster moved LS-0010 to AWAITING_APPROVAL on sentinel's verdict alone.
 - Real-mode sentinel refuses to start without `LEASEDESK_AWS_ACCOUNT_ID` (by design: it scopes Access Analyzer and the catalog to one account). The runbook sets it from the sentinel profile's own `sts get-caller-identity`, so the id never sits in a file in the repo.
+
+### Visual refresh (2026-11-07)
+
+Docs and images only; no product code changed. The identity is an ukiyo-e woodblock print in an Art Nouveau frame (palette and type in docs/design/README.md).
+
+- Every image is authored as HTML with inline SVG in `docs/design/src/`, rendered with headless Chrome at 2x and quantized with Pillow by `scripts/design/render.sh`. The shared art lives in one script, `art.js`, so the hero, the social card and the GIF cards draw the same wave.
+- The fonts (Bigelow Rules, Alegreya, Shippori Mincho B1) are downloaded from google/fonts into `build/fonts/` instead of being committed: Shippori Mincho B1 alone is 15 MB. `make_gif.py` exits with a hint if they are missing.
+- The GIF's title and end cards are rendered to `docs/design/cards/` at the GIF's size, so `make_gif.py` stays pure Pillow.
+- The CI badge overrides shields.io's status colour with bero-ai, so a failing run still reads "failing" but is not red. Ruling: keep the palette; the word carries the status.
+- The README's scenario table shows the matted prints and links each to its full screenshot.
