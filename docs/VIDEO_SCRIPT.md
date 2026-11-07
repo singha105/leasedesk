@@ -30,4 +30,4 @@ Adjusted to what the live scenarios showed on 2026-11-07 (docs/SCENARIOS.md). Ti
 - Add captions.
 - Upload to YouTube as unlisted, then open the link in a logged-out browser to check it plays.
 - Check the submission form for a length limit before the final cut.
-- Cut the 90-second GIF for the README from the same footage: `docs/media/leasedesk.gif`, under 10 MB.
+- The README GIF (`docs/media/leasedesk.gif`, about 50 seconds) is built from captures of the live runs. Swap in a cut of the video if you like; keep it under 10 MB.

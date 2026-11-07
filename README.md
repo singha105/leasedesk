@@ -5,10 +5,7 @@ Just-in-time AWS access, asked for in plain English in a Switch room, approved b
 [![tests](https://github.com/singha105/leasedesk/actions/workflows/ci.yml/badge.svg)](https://github.com/singha105/leasedesk/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!-- Demo GIF goes here once recorded (docs/media/leasedesk.gif, under 10 MB):
-![LeaseDesk in 90 seconds: a request in chat, two reviewers, an approval, then access that expires on its own](docs/media/leasedesk.gif)
--->
-![A lease in Discord: keymaster asks for approval, it goes ACTIVE, skeptic adds a note, and the lease expires on time](docs/media/happy-path.png)
+![LeaseDesk in under a minute: a request in chat, a drafted policy, two reviewers, an approval, then access that expires on its own](docs/media/leasedesk.gif)
 
 ## The problem
 
