@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from leasedesk.common.ids import ensure_sequence_table, next_lease_id
 from leasedesk.common.schemas import LeaseProposal
+from leasedesk.common.sqlite import open_private
 
 
 class LeaseState(StrEnum):
@@ -208,16 +209,13 @@ def _dt(value: str | None) -> datetime | None:
 
 class LeaseStore:
     def __init__(self, path: Path, clock: Callable[[], datetime]) -> None:
-        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.path = path
         self.clock = clock
-        self._conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+        self._conn = open_private(path)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
         ensure_sequence_table(self._conn)
-        path.chmod(0o600)
 
     def close(self) -> None:
         self._conn.close()

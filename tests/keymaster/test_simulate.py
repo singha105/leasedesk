@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from leasedesk.common.render import render_policy, serialize
 from leasedesk.common.schemas import LeaseProposal
-from leasedesk.keymaster.render import render_policy, serialize
 from leasedesk.keymaster.simulate import default_request, simulate_lease
 from leasedesk.keymaster.store import LeaseState, LeaseStore
 

@@ -18,20 +18,20 @@ from pathlib import Path
 from typing import Any
 
 from leasedesk.common import format as fmt
-from leasedesk.common.schemas import AccessPolicy
-from leasedesk.config import Settings
-from leasedesk.keymaster import commands
-from leasedesk.keymaster.executor import Executor, ExecutorError
-from leasedesk.keymaster.ledger import DESCRIPTION, INSTRUCTIONS, NAME, Ledger
-from leasedesk.keymaster.policy import LoadResult, PolicyLoader
-from leasedesk.keymaster.reconciler import Reconciler
-from leasedesk.keymaster.render import (
+from leasedesk.common.policy import LoadResult, PolicyLoader
+from leasedesk.common.render import (
     PolicyTooLarge,
     check_user_total,
     policy_name,
     render_policy,
     serialize,
 )
+from leasedesk.common.schemas import AccessPolicy
+from leasedesk.config import Settings
+from leasedesk.keymaster import commands
+from leasedesk.keymaster.executor import Executor, ExecutorError
+from leasedesk.keymaster.ledger import DESCRIPTION, INSTRUCTIONS, NAME, Ledger
+from leasedesk.keymaster.reconciler import Reconciler
 from leasedesk.keymaster.rules import who_may_approve
 from leasedesk.keymaster.scheduler import Scheduler
 from leasedesk.keymaster.store import Lease, LeaseState, LeaseStore
@@ -39,14 +39,13 @@ from leasedesk.switch.agent import CommandContext, SwitchAgent
 from leasedesk.switch.connection import RoomConnection
 from leasedesk.switch.credentials import AgentCredentials
 from leasedesk.switch.errors import SwitchError
-from leasedesk.switch.models import ControlFrame, SubscriptionChanged
+from leasedesk.switch.models import DomainEvent, MessagePayload
 from leasedesk.switch.ops import OpsClient
 
 S = LeaseState
 ACCESS_ROOM = "access-desk"
 APPROVABLE = [S.AWAITING_APPROVAL, S.ESCALATED]
 EXECUTOR_ROLE = "executor"
-ROLE_RETRY_S = 60.0
 
 
 def _utcnow() -> datetime:
@@ -85,8 +84,7 @@ class Keymaster(SwitchAgent):
         self.tz = settings.tz
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._ledger_doc_ids: dict[str, str] = {}
-        self._roles: set[str] = set()  # connection ids holding the executor role
-        self._claiming: set[str] = set()
+        self.role = EXECUTOR_ROLE
         self._ledger = Ledger(store, ledger_writer or self._write_ledger_doc, jsonl, self.tz)
         self.scheduler = Scheduler(
             store, executor, self, lambda: self.policy, clock, self.tz, lock=self.lock
@@ -162,43 +160,24 @@ class Keymaster(SwitchAgent):
             await self.ops.update_room_document(doc_id, connection_id=cid, content=content)
         self._ledger_doc_ids[room_id] = doc_id
 
-    # Role: "executor" per room, best effort (rooms get roles in Part 4) ---------------------
-
-    async def _try_role(self, room_id: str) -> bool:
-        session = self.sessions.get(room_id)
-        if session is None:
-            return False
-        if session.connection_id in self._roles:
-            return True
-        try:
-            await self.ops.assume_role(EXECUTOR_ROLE, connection_id=session.connection_id)
-        except SwitchError as exc:
-            self.log.info("role_not_assumed", room=room_id, role=EXECUTOR_ROLE, detail=exc.detail)
-            return False
-        self._roles.add(session.connection_id)
-        self.log.info("role_assumed", room=room_id, role=EXECUTOR_ROLE)
-        return True
-
-    async def _claim_role(self, room_id: str) -> None:
-        if room_id in self._claiming:
-            return
-        self._claiming.add(room_id)
-        try:
-            for _ in range(10_000):  # about a week of minutes; a room without roles is fine
-                if room_id not in self.sessions or await self._try_role(room_id):
-                    return
-                await asyncio.sleep(ROLE_RETRY_S)
-        finally:
-            self._claiming.discard(room_id)
-
-    async def on_room_ready(self, room_id: str) -> None:
-        self._spawn(self._claim_role(room_id))
-
-    async def on_control(self, room_id: str, frame: ControlFrame) -> None:
-        if isinstance(frame, SubscriptionChanged):
-            await self._try_role(room_id)
-
     # Commands fall through here -----------------------------------------------------------
+
+    async def on_unaddressed(self, room_id: str, ev: DomainEvent, msg: MessagePayload) -> None:
+        """A verdict may arrive without a mention (a plain post). Only the pinned sentinel's
+        counts; anything else unaddressed is chatter and gets no reply."""
+        pinned = self.settings.sentinel_id
+        if not pinned or msg.sender != pinned or "```verdict" not in (msg.body or ""):
+            return
+        ctx = CommandContext(
+            room_id=room_id,
+            event=ev,
+            msg=msg,
+            word="verdict",
+            args="",
+            thread_root=msg.thread_id or msg.message_id,
+            room_name=self.room_names.get(room_id, ""),
+        )
+        await commands.verdict(self, ctx)
 
     async def on_unknown(self, ctx: CommandContext) -> None:
         if "```verdict" in (ctx.msg.body or ""):

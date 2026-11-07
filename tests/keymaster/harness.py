@@ -8,12 +8,13 @@ from typing import Any
 
 import yaml
 
-from leasedesk.common.schemas import AccessPolicy
+from leasedesk.common.policy import PolicyLoader
+from leasedesk.common.schemas import AccessPolicy, proposal_hash
 from leasedesk.config import Settings
-from leasedesk.keymaster.policy import PolicyLoader
 from leasedesk.keymaster.service import Keymaster
 from leasedesk.keymaster.store import Lease, LeaseState, LeaseStore
 from leasedesk.switch.credentials import AgentCredentials
+from leasedesk.switch.errors import SwitchError
 from leasedesk.switch.models import DomainEvent
 from leasedesk.switch.ops import OpsClient
 
@@ -30,6 +31,7 @@ class CapturingKeymaster(Keymaster):
         super().__init__(*a, **kw)
         self.sent: list[tuple[str, str | None, str]] = []
         self.ledger_docs: list[str] = []
+        self.refuse_targets: set[str] = set()  # "roles" / "names": targeted sends that fail
 
     async def post(self, room_id: str, text: str, *, thread_id: str | None = None) -> list[str]:
         self.sent.append((room_id, thread_id, text))
@@ -44,6 +46,8 @@ class CapturingKeymaster(Keymaster):
         names: list[str] | None = None,
         thread_id: str | None = None,
     ) -> str:
+        if (roles and "roles" in self.refuse_targets) or (names and "names" in self.refuse_targets):
+            raise SwitchError(409, "no participant matches", "send_targeted_message")
         self.sent.append((room_id, thread_id, f"@{(roles or names or ['?'])[0]} {text}"))
         return f"sw_out_{len(self.sent)}"
 
@@ -147,7 +151,14 @@ class Harness:
         sender: str = SENTINEL,
         score: int = 10,
         findings: list[dict[str, Any]] | None = None,
+        *,
+        phash: str | None = None,
+        addressed: bool = True,
+        name: str = "sentinel",
     ) -> None:
+        if phash is None:
+            lease = self.store.get(lease_id)
+            phash = proposal_hash(lease.proposal) if lease else "sha256:0"
         v = {
             "kind": "lease_verdict",
             "version": 1,
@@ -156,9 +167,13 @@ class Harness:
             "score": score,
             "findings": findings or [],
             "aws_validation": "pass",
+            "proposal_hash": phash,
         }
         await self.say(
-            sender, f"@keymaster verdict\n```verdict\n{json.dumps(v)}\n```", name="sentinel"
+            sender,
+            f"@keymaster verdict\n```verdict\n{json.dumps(v)}\n```",
+            name=name,
+            addressed=addressed,
         )
 
     def lease(self, lease_id: str) -> Lease:

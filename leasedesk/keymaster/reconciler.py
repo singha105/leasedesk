@@ -14,9 +14,9 @@ from datetime import datetime
 
 from leasedesk.common import format as fmt
 from leasedesk.common.logging import get_logger
+from leasedesk.common.render import policy_name
 from leasedesk.keymaster.executor import Executor, ExecutorError
 from leasedesk.keymaster.notify import Notifier
-from leasedesk.keymaster.render import policy_name
 from leasedesk.keymaster.store import IllegalTransition, LeaseState, LeaseStore, StaleState
 
 log = get_logger(__name__)

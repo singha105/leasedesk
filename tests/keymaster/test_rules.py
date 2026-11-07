@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
+from leasedesk.common.globs import glob_intersects
 from leasedesk.common.schemas import AccessPolicy, LeaseProposal
 from leasedesk.keymaster.rules import (
     Required,
     approval_satisfied,
     can_approve,
-    glob_intersects,
     required_approvals,
     validate_proposal,
     who_may_approve,

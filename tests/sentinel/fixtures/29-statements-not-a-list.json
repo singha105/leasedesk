@@ -1,0 +1,18 @@
+{
+  "name": "29-statements-not-a-list",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": "s3:GetObject"
+  },
+  "expect": {
+    "risk": "BLOCK",
+    "rules": [
+      "struct-unreadable"
+    ]
+  }
+}

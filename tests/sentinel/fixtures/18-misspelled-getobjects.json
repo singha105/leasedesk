@@ -1,0 +1,34 @@
+{
+  "name": "18-misspelled-getobjects",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "Read",
+        "actions": [
+          "s3:GetObjects"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-billing-abc123/exports/2026-10/*"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "BLOCK",
+    "rules": [
+      "lint-unknown-action"
+    ],
+    "detail_contains": {
+      "lint-unknown-action": "parliament"
+    },
+    "fix_contains": {
+      "lint-unknown-action": "s3:GetObject?"
+    }
+  }
+}

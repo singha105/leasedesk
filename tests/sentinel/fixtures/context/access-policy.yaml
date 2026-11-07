@@ -1,0 +1,40 @@
+# Fixed access-policy for the golden tests (same as tests/keymaster/conftest.py).
+version: 1
+solo_mode: false
+max_duration_minutes: 240
+default_duration_minutes: 60
+approval_timeout_minutes: 30
+confirm_timeout_minutes: 15
+principals:
+  '@switch-discord-b1-arnab:localhost': lease-demo-dev
+  '@switch-discord-b1-priya:localhost': lease-demo-dev
+approvers:
+- id: '@switch-discord-b1-priya:localhost'
+  name: Priya
+  groups:
+  - security
+- id: '@switch-discord-b1-sam:localhost'
+  name: Sam
+  groups:
+  - security
+- id: '@switch-discord-b1-arnab:localhost'
+  name: Arnab
+  groups:
+  - eng-lead
+- id: '@switch-agent-5c41be00:localhost'
+  name: scribe
+  groups:
+  - security
+high_risk:
+  approvals: 2
+  require_group: security
+  approval_room: security-review
+allowed_resource_prefixes:
+- arn:aws:s3:::leasedesk-demo-
+- arn:aws:logs:us-east-1:123456789012:log-group:/leasedesk/
+forbidden_actions:
+- iam:*
+- sts:AssumeRole
+- organizations:*
+- kms:Decrypt
+- secretsmanager:GetSecretValue

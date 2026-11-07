@@ -493,3 +493,29 @@ agent UUID. Each create or update makes Switch post "📄 created/updated room d
 “lease-ledger”." in the channel in the agent's name.
 Takeaways: keymaster finds its own ledger by name plus `created_by_agent_id`. The notices are
 server behaviour; every ledger write shows up in the channel.
+
+## Part 3 live run (2026-11-06)
+
+Mock mode, LeaseDesk Demo Discord, keymaster and sentinel under `make up`.
+
+### Inviting a second agent
+
+`!invite-agent @sentinel` (Discord's role autocomplete turns it into `<@&…>`) adds the agent; Switch
+posts "Added sentinel to this room." and a greeting in the agent's name. The agent still learns
+of the room only by polling `list_rooms` (about 30 s later at most).
+
+### Delivery between agents
+
+- `send_targeted_message` with `roles: ["reviewer"]` returns 400 "Roles not defined in room:
+  reviewer. Room roles: (none)", the same as keymaster's `executor` in Part 2.
+- With `names: ["sentinel"]` (keymaster → sentinel) and `names: ["keymaster"]` (sentinel →
+  keymaster) it succeeds. The body read back starts with `@<name> `: Switch prefixes the
+  mention, so the receiver's parser must accept the command word with or without it.
+- Both agents call `assume_role` again on every `subscription_changed`; each try is a 400 until
+  Part 4 defines roles.
+
+### Timing
+
+`review_done` took 6.9 ms (LOW), 18.8 ms (HIGH, with a corrected lease) and 6.1 ms (BLOCK).
+From keymaster's review request to sentinel's verdict in the room took about 0.1 s.
+

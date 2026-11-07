@@ -11,11 +11,28 @@ from __future__ import annotations
 import copy
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
-from leasedesk.common.schemas import LeaseProposal
+
+class StatementLike(Protocol):
+    @property
+    def sid(self) -> str: ...
+    @property
+    def actions(self) -> list[str]: ...
+    @property
+    def resources(self) -> list[str]: ...
+    @property
+    def conditions(self) -> Mapping[str, Any] | None: ...
+
+
+class ProposalLike(Protocol):
+    """A LeaseProposal, or sentinel's lenient ProposalView (for a preview of the policy)."""
+
+    @property
+    def statements(self) -> Sequence[StatementLike]: ...
+
 
 # AWS IAM quotas (checked 2026-11-04): "User policy size can't exceed 2,048 characters", the
 # aggregate of all inline policies on one user; "IAM doesn't count white space".
@@ -40,7 +57,7 @@ def _ts(dt: datetime) -> str:
 
 
 def render_policy(
-    p: LeaseProposal, lease_id: str, starts_at: datetime, expires_at: datetime
+    p: ProposalLike, lease_id: str, starts_at: datetime, expires_at: datetime
 ) -> dict[str, Any]:
     prefix = lease_id.replace("-", "")
     statements: list[dict[str, Any]] = []

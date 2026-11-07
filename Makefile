@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 UV ?= uv
 
-.PHONY: help setup lint fmt test register run-keymaster run-sentinel up doctor e2e-mock moto check-access
+.PHONY: help setup lint fmt test register run-keymaster run-sentinel review up doctor e2e-mock moto check-access
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -36,17 +36,21 @@ run-keymaster: ## Run the keymaster agent (mock mode needs `make moto` running)
 	@mkdir -p logs
 	$(UV) run python -m leasedesk.keymaster
 
-run-sentinel: ## Run the sentinel agent (Part 3)
-	@echo "run-sentinel: filled in by Part 3"; exit 1
+run-sentinel: ## Run the sentinel reviewer agent alone (mock mode makes no AWS call)
+	@mkdir -p logs .state && chmod 700 .state
+	$(UV) run python -m leasedesk.sentinel
 
-up: ## Mock demo: moto in the background, keymaster in the foreground (Ctrl-C stops both)
+review: ## Offline review of a proposal file: make review P=path/to/proposal.json
+	$(UV) run python -m leasedesk.sentinel.cli review $(P)
+
+up: ## Mock demo: moto in the background, keymaster + sentinel supervised (Ctrl-C stops all)
 	@mkdir -p logs .state && chmod 700 .state
 	@$(UV) run python -m leasedesk.keymaster.mockaws > logs/moto.log 2>&1 & echo $$! > .state/moto.pid; \
 	 trap 'kill $$(cat .state/moto.pid) 2>/dev/null' EXIT; \
 	 for i in $$(seq 1 100); do [ .state/mock-aws.env -nt .state/moto.pid ] && break; sleep 0.2; done; \
 	 [ .state/mock-aws.env -nt .state/moto.pid ] || { echo "mock AWS did not start; see logs/moto.log"; exit 1; }; \
-	 echo "mock AWS up (logs/moto.log). Starting keymaster..."; \
-	 LEASEDESK_AWS_MODE=mock $(UV) run python -m leasedesk.keymaster
+	 echo "mock AWS up (logs/moto.log). Starting keymaster and sentinel..."; \
+	 LEASEDESK_AWS_MODE=mock $(UV) run python scripts/demo/supervise.py
 
 e2e-mock: ## End-to-end tests against moto (apply, simulate, expire)
 	$(UV) run pytest -m e2e

@@ -1,0 +1,32 @@
+{
+  "name": "07-passrole-lambda-create-invoke",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "Run",
+        "actions": [
+          "iam:PassRole",
+          "lambda:CreateFunction",
+          "lambda:InvokeFunction"
+        ],
+        "resources": [
+          "arn:aws:iam::123456789012:role/leasedesk-demo-runner",
+          "arn:aws:lambda:us-east-1:123456789012:function:leasedesk-demo-report"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "BLOCK",
+    "rules": [
+      "escalation-rhino-15-passrole-lambda-invoke",
+      "forbidden-action"
+    ]
+  }
+}

@@ -3,36 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import cache
 
+from leasedesk.common.globs import glob_intersects
 from leasedesk.common.schemas import AccessPolicy, LeaseProposal
 from leasedesk.keymaster.store import Approval, Lease
 
 MIN_DURATION = 5
 MIN_DURATION_DEV = 3
-
-
-def glob_intersects(a: str, b: str) -> bool:
-    """True when some action name matches both IAM patterns (``*`` and ``?``; any case).
-
-    Checked both ways at once, so ``iam:*`` vs ``iam:PassRole`` and ``s3:*`` vs
-    ``s3:DeleteBucket`` both intersect, and so do ``s3:Get*`` vs ``s3:*Object``.
-    """
-    x, y = a.lower(), b.lower()
-
-    @cache
-    def go(i: int, j: int) -> bool:
-        if i == len(x):
-            return all(c == "*" for c in y[j:])
-        if j == len(y):
-            return all(c == "*" for c in x[i:])
-        if x[i] == "*":
-            return go(i + 1, j) or go(i, j + 1)
-        if y[j] == "*":
-            return go(i, j + 1) or go(i + 1, j)
-        return (x[i] == y[j] or "?" in (x[i], y[j])) and go(i + 1, j + 1)
-
-    return go(0, 0)
 
 
 def validate_proposal(p: LeaseProposal, policy: AccessPolicy, *, dev_mode: bool) -> list[str]:

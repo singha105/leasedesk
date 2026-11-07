@@ -1,0 +1,28 @@
+{
+  "name": "25-demo-glob-covers-decoy",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "Read",
+        "actions": [
+          "s3:GetObject"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-*/*"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "HIGH",
+    "rules": [
+      "crown-jewel-read"
+    ]
+  }
+}

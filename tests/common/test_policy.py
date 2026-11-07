@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import yaml
 
-from leasedesk.keymaster.policy import PolicyLoader, parse_policy_text
+from leasedesk.common.policy import PolicyLoader, parse_policy_text
 
-from .conftest import policy_dict
+from ..keymaster.conftest import policy_dict
 
 GOOD = yaml.safe_dump(policy_dict())
 

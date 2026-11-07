@@ -68,7 +68,8 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelName(level.upper())),
-        cache_logger_on_first_use=True,
+        # Not cached: a logger first used under one configure must follow the next one.
+        cache_logger_on_first_use=False,
     )
 
 

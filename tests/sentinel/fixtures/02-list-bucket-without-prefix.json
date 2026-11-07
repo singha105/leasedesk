@@ -1,0 +1,40 @@
+{
+  "name": "02-list-bucket-without-prefix",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "ReadInvoiceExports",
+        "actions": [
+          "s3:GetObject"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-billing-abc123/exports/2026-10/*"
+        ]
+      },
+      {
+        "sid": "ListInvoiceExports",
+        "actions": [
+          "s3:ListBucket"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-billing-abc123"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "LOW",
+    "rules": [
+      "list-bucket-no-prefix"
+    ],
+    "fix_contains": {
+      "list-bucket-no-prefix": "exports/2026-10/*"
+    }
+  }
+}

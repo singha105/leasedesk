@@ -1,0 +1,30 @@
+{
+  "name": "30-s3-put-star-hides-policy",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "Puts",
+        "actions": [
+          "s3:Put*"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-billing-abc123",
+          "arn:aws:s3:::leasedesk-demo-billing-abc123/*"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "HIGH",
+    "rules": [
+      "wildcard-covers-tamper",
+      "access-permissions-management"
+    ]
+  }
+}

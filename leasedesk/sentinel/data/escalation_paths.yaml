@@ -1,0 +1,167 @@
+# Known AWS IAM privilege-escalation paths, matched against a lease's expanded action set.
+# A path whose `requires` are all present is BLOCK; one action short is a MEDIUM note.
+# Sources (checked 2026-11-06):
+#   Rhino Security Labs, "AWS IAM Privilege Escalation: Methods and Mitigation" (methods 1-21;
+#     the page has no per-method anchors, so the method number is in the name)
+#   Rhino Security Labs, same series part 2 (Lambda layers, SageMaker notebooks)
+#   hackingthe.cloud, "AWS IAM Privilege Escalation Techniques" and
+#     "Run Shell Commands on EC2 with Send Command or Session Manager"
+#   AWS CodeBuild user guide (no listed source covers CodeBuild; AWS warns that the service
+#     role "can unintentionally escalate a user's permissions")
+version: 1
+paths:
+  - id: rhino-1-create-policy-version
+    name: Create a new version of a managed policy and make it the default (Rhino Security Labs, method 1)
+    requires: [iam:CreatePolicyVersion]
+    severity: BLOCK
+    reference: https://rhinosecuritylabs.com/aws/aws-privilege-escalation/
+  - id: rhino-2-set-default-policy-version
+    name: Switch a managed policy to an older, broader version (Rhino Security Labs, method 2)
+    requires: [iam:SetDefaultPolicyVersion]
+    severity: BLOCK
+    reference: https://rhinosecuritylabs.com/aws/aws-privilege-escalation/
+  - id: rhino-3-passrole-ec2
+    name: Launch an EC2 instance with a more privileged instance profile (Rhino Security Labs, method 3)
+    requires: [iam:PassRole, ec2:RunInstances]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-ec2runinstances
+  - id: rhino-4-create-access-key
+    name: Create access keys for another user (Rhino Security Labs, method 4)
+    requires: [iam:CreateAccessKey]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamcreateaccesskey
+  - id: rhino-5-create-login-profile
+    name: Give another user a console password (Rhino Security Labs, method 5)
+    requires: [iam:CreateLoginProfile]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamcreateloginprofile
+  - id: rhino-6-update-login-profile
+    name: Change another user's console password (Rhino Security Labs, method 6)
+    requires: [iam:UpdateLoginProfile]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamupdateloginprofile
+  - id: rhino-7-attach-user-policy
+    name: Attach any managed policy (AdministratorAccess) to a user (Rhino Security Labs, method 7)
+    requires: [iam:AttachUserPolicy]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamattachuserpolicy
+  - id: rhino-8-attach-group-policy
+    name: Attach any managed policy to a group you are in (Rhino Security Labs, method 8)
+    requires: [iam:AttachGroupPolicy]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamattachgrouppolicy
+  - id: rhino-9-attach-role-policy
+    name: Attach any managed policy to a role, then assume it (Rhino Security Labs, method 9)
+    requires: [iam:AttachRolePolicy, sts:AssumeRole]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamattachrolepolicy
+  - id: rhino-10-put-user-policy
+    name: Write an inline policy onto a user (Rhino Security Labs, method 10)
+    requires: [iam:PutUserPolicy]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamputuserpolicy
+  - id: rhino-11-put-group-policy
+    name: Write an inline policy onto a group (Rhino Security Labs, method 11)
+    requires: [iam:PutGroupPolicy]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamputgrouppolicy
+  - id: rhino-12-put-role-policy
+    name: Write an inline policy onto a role, then assume it (Rhino Security Labs, method 12)
+    requires: [iam:PutRolePolicy, sts:AssumeRole]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamputrolepolicy
+  - id: rhino-13-add-user-to-group
+    name: Add yourself to a more privileged group (Rhino Security Labs, method 13)
+    requires: [iam:AddUserToGroup]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamaddusertogroup
+  - id: rhino-14-update-assume-role-policy
+    name: Rewrite a role's trust policy, then assume the role (Rhino Security Labs, method 14)
+    requires: [iam:UpdateAssumeRolePolicy, sts:AssumeRole]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamupdateassumerolepolicy
+  - id: rhino-15-passrole-lambda-invoke
+    name: Create a Lambda with any passable role and invoke it (Rhino Security Labs, method 15)
+    requires: [iam:PassRole, lambda:CreateFunction, lambda:InvokeFunction]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-lambdacreatefunction-lambdainvokefunction
+  - id: rhino-16-passrole-lambda-event-source
+    name: Create a Lambda with any passable role and trigger it from an event source (Rhino Security Labs, method 16)
+    requires: [iam:PassRole, lambda:CreateFunction, lambda:CreateEventSourceMapping]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-lambdacreateeventsourcemapping-lambdacreatefunction
+  - id: rhino-17-update-function-code
+    name: Replace the code of a Lambda that runs with a stronger role (Rhino Security Labs, method 17)
+    requires: [lambda:UpdateFunctionCode]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#lambdaupdatefunctioncode
+  - id: rhino-18-passrole-glue-dev-endpoint
+    name: Create a Glue dev endpoint with any passable role (Rhino Security Labs, method 18)
+    requires: [iam:PassRole, glue:CreateDevEndpoint]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-gluecreatedevendpoint
+  - id: rhino-19-update-glue-dev-endpoint
+    name: Add your SSH key to an existing Glue dev endpoint (Rhino Security Labs, method 19)
+    requires: [glue:UpdateDevEndpoint]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#glueupdatedevendpoint
+  - id: rhino-20-passrole-cloudformation
+    name: Create a CloudFormation stack that runs with any passable role (Rhino Security Labs, method 20)
+    requires: [iam:PassRole, cloudformation:CreateStack]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-cloudformationcreatestack
+  - id: rhino-21-passrole-datapipeline
+    name: Create a Data Pipeline that runs commands with any passable role (Rhino Security Labs, method 21)
+    requires: [iam:PassRole, datapipeline:CreatePipeline, datapipeline:PutPipelineDefinition]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-datapipelineactivatepipeline-datapipelinecreatepipeline-datapipelineputpipelinedefinition
+  - id: htc-passrole-ecs-task
+    name: Register and run an ECS task with any passable role (hackingthe.cloud)
+    requires: [iam:PassRole, ecs:RegisterTaskDefinition, ecs:RunTask]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-ecsruntask
+  - id: aws-passrole-codebuild
+    name: Create and start a CodeBuild project with any passable service role (AWS CodeBuild guide)
+    requires: [iam:PassRole, codebuild:CreateProject, codebuild:StartBuild]
+    severity: BLOCK
+    reference: https://docs.aws.amazon.com/codebuild/latest/userguide/setting-up-service-role.html
+  - id: rhino2-passrole-sagemaker-notebook
+    name: Create a SageMaker notebook with any passable role and open it (Rhino Security Labs part 2, method 2)
+    requires: [iam:PassRole, sagemaker:CreateNotebookInstance]
+    severity: BLOCK
+    reference: https://rhinosecuritylabs.com/aws/aws-privilege-escalation-methods-mitigation-part-2/
+  - id: htc-ssm-send-command
+    name: Run commands on an EC2 instance, as its instance role (hackingthe.cloud)
+    requires: [ssm:SendCommand]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/post_exploitation/run_shell_commands_on_ec2/#send-command
+  - id: htc-ssm-start-session
+    name: Open a shell on an EC2 instance with Session Manager, as its instance role (hackingthe.cloud)
+    requires: [ssm:StartSession]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/post_exploitation/run_shell_commands_on_ec2/#session-manager
+  - id: rhino2-lambda-layer
+    name: Attach a malicious layer to a Lambda that runs with a stronger role (Rhino Security Labs part 2, method 1)
+    requires: [lambda:UpdateFunctionConfiguration]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#lambdaupdatefunctionconfiguration
+  - id: htc-delete-user-boundary
+    name: Remove a user's permissions boundary (hackingthe.cloud)
+    requires: [iam:DeleteUserPermissionsBoundary]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamdeleteuserpermissionsboundary
+  - id: htc-put-user-boundary
+    name: Replace a user's permissions boundary with a looser one (hackingthe.cloud)
+    requires: [iam:PutUserPermissionsBoundary]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iamputuserpermissionsboundary
+  - id: htc-passrole-glue-job
+    name: Create a Glue job with any passable role (hackingthe.cloud)
+    requires: [iam:PassRole, glue:CreateJob]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-gluecreatejob
+  - id: htc-passrole-lambda-add-permission
+    name: Create a Lambda with any passable role and let yourself invoke it (hackingthe.cloud)
+    requires: [iam:PassRole, lambda:AddPermission, lambda:CreateFunction]
+    severity: BLOCK
+    reference: https://hackingthe.cloud/aws/exploitation/iam_privilege_escalation/#iampassrole-lambdaaddpermission-lambdacreatefunction

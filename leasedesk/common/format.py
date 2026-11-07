@@ -106,6 +106,12 @@ def fmt_time(dt: datetime, tz: str) -> str:
 _SUFFIX = re.compile(r"-(?:[0-9a-f]{6}|mock|<suffix>)$")
 
 
+def echo(text: str) -> str:
+    """Proposal text keymaster repeats: one line, no backtick (it could open a fenced block)
+    and no ``@`` (it could mention an agent). The lease block itself keeps the exact text."""
+    return " ".join(text.split()).replace("`", "'").replace("@", "(at)")
+
+
 def short_resource(arn: str) -> str:
     if arn.startswith("arn:aws:s3:::"):
         bucket, _, key = arn[len("arn:aws:s3:::") :].partition("/")
@@ -124,7 +130,7 @@ def describe_access(statements: list[LeaseStatement]) -> str:
             out.append(f"{actions} (prefix-limited)")
         else:
             out.append(f"{actions} on {', '.join(short_resource(r) for r in s.resources)}")
-    return ", ".join(out)
+    return echo(", ".join(out))
 
 
 def _lines(*parts: str | None) -> str:
@@ -135,10 +141,10 @@ def _lines(*parts: str | None) -> str:
 
 
 def submitted(lease_id: str, by: str, requester_hint: str, p: LeaseProposal, tz: str) -> str:
-    who = requester_hint or "the requester"
+    who = echo(requester_hint) or "the requester"
     return _lines(
         f"{lease_id} · submitted by {by} for {who}",
-        f"Summary: {p.summary}",
+        f"Summary: {echo(p.summary)}",
         f"What: {describe_access(p.statements)}",
         f"How long: {p.duration_minutes} min, starting when approved",
         confirm_needed(lease_id, who),

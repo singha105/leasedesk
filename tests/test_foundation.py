@@ -59,3 +59,18 @@ def test_library_loggers_quiet_below_warning() -> None:
     configure_logging("INFO")
     for name in ("httpx", "httpcore", "websockets"):
         assert logging.getLogger(name).level >= logging.WARNING
+
+
+def test_a_warning_configure_does_not_stick_to_module_loggers() -> None:
+    """The CLI configures WARNING. A module logger first used then must still log INFO once
+    logging is configured again (a test after it, or an agent in the same process)."""
+    from structlog.testing import capture_logs
+
+    log = structlog.get_logger("cache-check")
+    configure_logging("WARNING")
+    log.info("hidden")
+    configure_logging("INFO")
+    with capture_logs() as logs:
+        log.info("shown")
+    structlog.reset_defaults()
+    assert [e["event"] for e in logs] == ["shown"]

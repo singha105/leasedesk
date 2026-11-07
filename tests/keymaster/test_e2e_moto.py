@@ -8,10 +8,10 @@ import boto3
 import pytest
 from moto import mock_aws
 
+from leasedesk.common.render import policy_name, render_policy, serialize
 from leasedesk.common.schemas import AccessPolicy, LeaseProposal
 from leasedesk.keymaster.executor import BotoIamExecutor
 from leasedesk.keymaster.mockaws import seed
-from leasedesk.keymaster.render import policy_name, render_policy, serialize
 from leasedesk.keymaster.scheduler import Scheduler
 from leasedesk.keymaster.store import LeaseState, LeaseStore
 

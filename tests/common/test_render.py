@@ -7,8 +7,7 @@ from datetime import timedelta
 
 import pytest
 
-from leasedesk.common.schemas import LeaseProposal
-from leasedesk.keymaster.render import (
+from leasedesk.common.render import (
     PolicyTooLarge,
     check_user_total,
     iam_size,
@@ -16,11 +15,17 @@ from leasedesk.keymaster.render import (
     render_policy,
     serialize,
 )
+from leasedesk.common.schemas import LeaseProposal
 
-from ..common.conftest import proposal_dict
-from .conftest import T0
+from ..keymaster.conftest import T0
+from .conftest import proposal_dict
 
 END = T0 + timedelta(minutes=120)
+
+
+@pytest.fixture
+def proposal() -> LeaseProposal:
+    return LeaseProposal.model_validate(proposal_dict())
 
 
 def test_policy_name() -> None:

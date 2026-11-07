@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
+from leasedesk.common.render import policy_name
 from leasedesk.common.schemas import LeaseProposal
 from leasedesk.config import Settings
 from leasedesk.keymaster.__main__ import (
@@ -22,7 +23,6 @@ from leasedesk.keymaster.__main__ import (
     main,
     serve,
 )
-from leasedesk.keymaster.render import policy_name
 from leasedesk.keymaster.store import LeaseState, LeaseStore
 from leasedesk.switch.connection import ExitReason
 from leasedesk.switch.credentials import AgentCredentials, save_credentials

@@ -4,6 +4,11 @@ It keeps one RoomConnection per room it is assigned to (found by polling ``list_
 because an invitation sends no frame), learns its own sender id from its room_join in
 ``read_context``, ignores its own and duplicate messages, and hands addressed messages to the
 handler registered for the first word after its mention.
+
+An agent with a ``role`` claims it in every room: when the room is ready, then every
+``role_retry_s`` until it sticks, and again on each room_join and subscription_changed (a room
+gets its roles from a person, possibly after the agent joined). Without the role the agent
+still works; targeted delivery falls back through ``deliver``.
 """
 
 from __future__ import annotations
@@ -22,13 +27,21 @@ from leasedesk.config import Settings
 from leasedesk.switch.connection import ExitReason, RoomConnection
 from leasedesk.switch.credentials import AgentCredentials
 from leasedesk.switch.errors import SwitchError
-from leasedesk.switch.models import ControlFrame, DomainEvent, MessagePayload, Participant
+from leasedesk.switch.models import (
+    ControlFrame,
+    DomainEvent,
+    MessagePayload,
+    Participant,
+    SubscriptionChanged,
+)
 from leasedesk.switch.ops import OpsClient
 
 log = get_logger(__name__)
 
 DEDUPE_SIZE = 2000
 READY_TIMEOUT_S = 10.0
+ROLE_RETRY_S = 60.0
+ROLE_MAX_TRIES = 10_000  # about a week of minutes; a room without roles is fine
 FINAL_FOR_AGENT = frozenset({ExitReason.TAKEN_OVER, ExitReason.AUTH_FAILED})
 
 
@@ -92,6 +105,10 @@ class SwitchAgent:
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._background: set[asyncio.Task[None]] = set()
         self._exit: asyncio.Future[ExitReason] | None = None
+        self.role: str | None = None
+        self.role_retry_s = ROLE_RETRY_S
+        self._role_conns: set[str] = set()  # connection ids holding self.role
+        self._claiming: set[str] = set()
         self.log = log.bind(agent=self.name)
         if own_id:
             self.known_agent_ids.add(own_id)
@@ -157,6 +174,8 @@ class SwitchAgent:
     async def handle_event(self, room_id: str, ev: DomainEvent) -> None:
         if ev.type == "room_join":
             self._spawn(self.learn_room(room_id))
+            if self.role:
+                self._spawn(self._claim_role(room_id))
             return
         msg = ev.message()
         if msg is None:
@@ -234,6 +253,38 @@ class SwitchAgent:
             thread_id=thread_id,
         )
 
+    async def deliver(
+        self,
+        room_id: str,
+        text: str,
+        *,
+        roles: list[str] | None = None,
+        names: list[str] | None = None,
+        thread_id: str | None = None,
+    ) -> str:
+        """Send to another agent: by role, then by name, then as a plain ``@name`` post.
+
+        Returns which path worked (``roles``, ``names`` or ``post``); a failed plain post
+        raises. The live server decides which path works (docs/PROTOCOL_NOTES.md).
+        """
+        attempts: list[tuple[str, dict[str, list[str]]]] = []
+        if roles:
+            attempts.append(("roles", {"roles": roles}))
+        if names:
+            attempts.append(("names", {"names": names}))
+        for how, target in attempts:
+            try:
+                await self.targeted(room_id, text, thread_id=thread_id, **target)
+            except SwitchError as exc:
+                self.log.info("delivery_fallback", room=room_id, path=how, detail=exc.detail)
+                continue
+            self.log.info("delivered", room=room_id, path=how)
+            return how
+        mention = f"@{names[0]} " if names else (f"@{roles[0]} " if roles else "")
+        await self.post(room_id, mention + text, thread_id=thread_id)
+        self.log.info("delivered", room=room_id, path="post")
+        return "post"
+
     def session(self, room_id: str) -> Any:
         return self.sessions[room_id]
 
@@ -247,6 +298,39 @@ class SwitchAgent:
             or rname.lower().endswith(f": {want}")
             or rname.lower().endswith(f": #{want}")
         ]
+
+    # Role -------------------------------------------------------------------------------
+
+    def has_role(self, room_id: str) -> bool:
+        session = self.sessions.get(room_id)
+        return session is not None and session.connection_id in self._role_conns
+
+    async def _try_role(self, room_id: str) -> bool:
+        session = self.sessions.get(room_id)
+        if session is None or not self.role:
+            return False
+        if session.connection_id in self._role_conns:
+            return True
+        try:
+            await self.ops.assume_role(self.role, connection_id=session.connection_id)
+        except SwitchError as exc:
+            self.log.info("role_not_assumed", room=room_id, role=self.role, detail=exc.detail)
+            return False
+        self._role_conns.add(session.connection_id)
+        self.log.info("role_assumed", room=room_id, role=self.role)
+        return True
+
+    async def _claim_role(self, room_id: str) -> None:
+        if room_id in self._claiming:
+            return
+        self._claiming.add(room_id)
+        try:
+            for _ in range(ROLE_MAX_TRIES):
+                if room_id not in self.sessions or await self._try_role(room_id):
+                    return
+                await asyncio.sleep(self.role_retry_s)
+        finally:
+            self._claiming.discard(room_id)
 
     # Rooms --------------------------------------------------------------------------------
 
@@ -263,6 +347,8 @@ class SwitchAgent:
             await self.handle_event(room_id, ev)
 
         async def on_control(frame: ControlFrame) -> None:
+            if self.role and isinstance(frame, SubscriptionChanged):
+                await self._try_role(room_id)
             await self.on_control(room_id, frame)
 
         session = self._factory(
@@ -281,6 +367,8 @@ class SwitchAgent:
         async def when_ready() -> None:
             await session.ready.wait()
             await self.learn_room(room_id)
+            if self.role:
+                self._spawn(self._claim_role(room_id))
             await self.on_room_ready(room_id)
 
         ready_task = asyncio.ensure_future(when_ready())

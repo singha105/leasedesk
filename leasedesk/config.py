@@ -39,12 +39,20 @@ class Settings(BaseSettings):
         default=Path("switch/docs/access-policy.yaml"), alias="LEASEDESK_POLICY_FILE"
     )
     policy_document_name: str = Field(default="access-policy", alias="LEASEDESK_POLICY_DOC")
+    catalog_document_name: str = Field(default="resource-catalog", alias="LEASEDESK_CATALOG_DOC")
+    catalog_file: Path = Field(
+        default=Path("switch/docs/resource-catalog.md"), alias="LEASEDESK_CATALOG_FILE"
+    )
     dev_fake_verdict: Literal["LOW", "MEDIUM", "HIGH", "BLOCK"] | None = Field(
         default=None, alias="LEASEDESK_DEV_FAKE_VERDICT"
     )
     dev_mode: bool = Field(default=False, alias="LEASEDESK_DEV_MODE")
     moto_port: int = Field(default=5055, alias="LEASEDESK_MOTO_PORT")
     db_path: Path = Field(default=Path(".state/keymaster.db"), alias="LEASEDESK_DB")
+    sentinel_db_path: Path = Field(
+        default=Path(".state/sentinel.db"), alias="LEASEDESK_SENTINEL_DB"
+    )
+    aws_account_id: str | None = Field(default=None, alias="LEASEDESK_AWS_ACCOUNT_ID")
     keymaster_id: str | None = Field(default=None, alias="LEASEDESK_KEYMASTER_ID")
     sentinel_id: str | None = Field(default=None, alias="LEASEDESK_SENTINEL_ID")
 

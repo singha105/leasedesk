@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from leasedesk.common.render import render_policy
 from leasedesk.common.schemas import LeaseProposal
 from leasedesk.keymaster.evaluator import evaluate
-from leasedesk.keymaster.render import render_policy
 
 from .conftest import T0
 

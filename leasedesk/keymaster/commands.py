@@ -18,7 +18,13 @@ from pydantic import ValidationError
 from leasedesk.common import format as fmt
 from leasedesk.common.fences import FenceError, extract_blocks, extract_one
 from leasedesk.common.ids import normalize_lease_id
-from leasedesk.common.schemas import AccessPolicy, LeaseProposal, LeaseVerdict, ReviewRequest
+from leasedesk.common.schemas import (
+    AccessPolicy,
+    LeaseProposal,
+    LeaseVerdict,
+    ReviewRequest,
+    proposal_hash,
+)
 from leasedesk.keymaster.rules import (
     approval_satisfied,
     can_approve,
@@ -40,6 +46,8 @@ if TYPE_CHECKING:
 S = LeaseState
 Handler = Callable[["Keymaster", CommandContext], Awaitable[None]]
 SECURITY_GROUP = "security"
+REVIEWER_ROLE = "reviewer"
+REVIEWER_NAME = "sentinel"
 
 
 def _errors(exc: ValidationError) -> list[str]:
@@ -173,9 +181,16 @@ async def confirm(km: Keymaster, ctx: CommandContext) -> None:
         )
         text = fmt.review_request(lease.id, name, review.model_dump_json())
         try:
-            await km.targeted(ctx.room_id, text, roles=["reviewer"], thread_id=lease.thread_id)
-        except SwitchError:
-            await km.post(ctx.room_id, f"@reviewer {text}", thread_id=lease.thread_id)
+            await km.deliver(
+                ctx.room_id,
+                text,
+                roles=[REVIEWER_ROLE],
+                names=[REVIEWER_NAME],
+                thread_id=lease.thread_id,
+            )
+        except SwitchError as exc:
+            # The lease stays UNDER_REVIEW; the review timeout cancels it if nothing answers.
+            km.log.error("review_request_undelivered", lease=lease.id, detail=exc.detail)
         await km.ledger_record(lease)
     fake = km.settings.dev_fake_verdict
     # Dev-only stand-in for sentinel; __main__ refuses it in real mode, and so does this.
@@ -189,16 +204,28 @@ async def confirm(km: Keymaster, ctx: CommandContext) -> None:
             score=0,
             findings=[],
             aws_validation="skipped",
+            proposal_hash=proposal_hash(lease.proposal),
         )
         await apply_verdict(km, verdict, source="dev fake verdict")
 
 
 async def verdict(km: Keymaster, ctx: CommandContext) -> None:
+    """A verdict block. Who sent it is checked before the block is even parsed."""
     pinned = km.settings.sentinel_id
     if pinned and ctx.msg.sender != pinned:
         km.log.warning("verdict_from_wrong_sender", sender=ctx.msg.sender)
         await km.reply(ctx, "Verdict ignored: only sentinel's verdicts count.")
         return
+    if not pinned:
+        # A display name can be copied by anyone, so outside dev mode only the pinned id counts.
+        if not km.settings.dev_mode:
+            await km.reply(
+                ctx, "Verdict ignored: LEASEDESK_SENTINEL_ID isn't set, so no verdict counts."
+            )
+            return
+        if not _is_agent(km, ctx):
+            await km.reply(ctx, "Verdict ignored: verdicts come from the review agent.")
+            return
     try:
         blocks = [b for b in extract_blocks(ctx.msg.body or "") if b.kind == "verdict"]
         if len(blocks) != 1:
@@ -211,16 +238,12 @@ async def verdict(km: Keymaster, ctx: CommandContext) -> None:
         await km.reply(ctx, "Verdict not accepted: " + "; ".join(_errors(exc)[:4]))
         return
     if not pinned:
-        # A display name can be copied by anyone, so outside dev mode only the pinned id counts.
-        if not km.settings.dev_mode:
-            await km.reply(
-                ctx, "Verdict ignored: LEASEDESK_SENTINEL_ID isn't set, so no verdict counts."
-            )
-            return
-        if not _is_agent(km, ctx):
-            await km.reply(ctx, "Verdict ignored: verdicts come from the review agent.")
-            return
         km.log.warning("verdict_sender_not_pinned", sender=ctx.msg.sender, lease=v.lease_id)
+    lease = km.store.get(v.lease_id)
+    if lease is not None and v.proposal_hash != proposal_hash(lease.proposal):
+        km.log.warning("verdict_hash_mismatch", sender=ctx.msg.sender, lease=v.lease_id)
+        await km.reply(ctx, f"Verdict ignored: it is for a different proposal than {v.lease_id}.")
+        return
     await apply_verdict(km, v, source=ctx.msg.sender_name or "reviewer", ctx=ctx)
 
 

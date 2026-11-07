@@ -144,3 +144,17 @@ def test_flags(store: LeaseStore) -> None:
     assert store.get_flag("frozen") is False
     store.set_flag("frozen", True)
     assert store.get_flag("frozen") is True
+
+
+def test_database_and_its_wal_files_are_private(
+    tmp_path: Path, clock: Clock, proposal: LeaseProposal
+) -> None:
+    path = tmp_path / "state" / "keymaster.db"
+    store = LeaseStore(path, clock=clock)
+    make(store, proposal)
+    files = [p for p in path.parent.iterdir() if p.name.startswith("keymaster.db")]
+    assert {p.name for p in files} >= {"keymaster.db", "keymaster.db-wal", "keymaster.db-shm"}
+    assert {p.name: oct(p.stat().st_mode & 0o777) for p in files} == {
+        p.name: "0o600" for p in files
+    }
+    store.close()

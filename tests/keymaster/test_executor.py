@@ -11,10 +11,10 @@ import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
+from leasedesk.common.render import render_policy, serialize
 from leasedesk.common.schemas import LeaseProposal
 from leasedesk.keymaster.executor import BotoIamExecutor
 from leasedesk.keymaster.mockaws import MockAwsServer, MockSandbox, seed
-from leasedesk.keymaster.render import render_policy, serialize
 
 from .conftest import T0
 

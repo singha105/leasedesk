@@ -1,0 +1,42 @@
+{
+  "name": "16-sets-aws-currenttime",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "ReadInvoiceExports",
+        "actions": [
+          "s3:GetObject"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-billing-abc123/exports/2026-10/*"
+        ]
+      },
+      {
+        "sid": "ListInvoiceExports",
+        "actions": [
+          "s3:ListBucket"
+        ],
+        "resources": [
+          "arn:aws:s3:::leasedesk-demo-billing-abc123"
+        ],
+        "conditions": {
+          "DateLessThan": {
+            "aws:CurrentTime": "2030-01-01T00:00:00Z"
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "risk": "BLOCK",
+    "rules": [
+      "struct-current-time"
+    ]
+  }
+}

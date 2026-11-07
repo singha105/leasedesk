@@ -18,6 +18,8 @@ ACTION_PATTERN = r"^[a-z0-9-]+:[A-Za-z0-9*]+$"
 Action = Annotated[str, StringConstraints(pattern=ACTION_PATTERN)]
 LeaseId = Annotated[str, StringConstraints(pattern=r"^LS-\d{4,}$")]
 Risk = Literal["LOW", "MEDIUM", "HIGH", "BLOCK"]
+Severity = Literal["BLOCK", "HIGH", "MEDIUM", "LOW", "INFO"]
+ProposalHash = Annotated[str, StringConstraints(pattern=r"^sha256:[0-9a-f]{64}$")]
 ConditionValue = str | list[str]
 _CURRENT_TIME = re.compile(r"aws:currenttime", re.IGNORECASE)
 
@@ -26,13 +28,13 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-def _mentions_current_time(value: Any) -> bool:
+def mentions_current_time(value: Any) -> bool:
     if isinstance(value, str):
         return bool(_CURRENT_TIME.search(value))
     if isinstance(value, dict):
-        return any(_mentions_current_time(k) or _mentions_current_time(v) for k, v in value.items())
+        return any(mentions_current_time(k) or mentions_current_time(v) for k, v in value.items())
     if isinstance(value, list):
-        return any(_mentions_current_time(v) for v in value)
+        return any(mentions_current_time(v) for v in value)
     return False
 
 
@@ -55,7 +57,7 @@ class LeaseStatement(_Strict):
     def _no_current_time(
         cls, v: dict[str, dict[str, ConditionValue]] | None
     ) -> dict[str, dict[str, ConditionValue]] | None:
-        if v is not None and _mentions_current_time(v):
+        if v is not None and mentions_current_time(v):
             raise ValueError("conditions must not use aws:CurrentTime; keymaster sets the window")
         return v
 
@@ -78,10 +80,21 @@ class LeaseProposal(_Strict):
         return v
 
 
+def canonical_hash(data: Any) -> str:
+    """``sha256:<hex>`` of ``data`` as sorted, compact JSON."""
+    canon = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(canon.encode()).hexdigest()
+
+
+def proposal_hash(p: LeaseProposal) -> str:
+    """Binds a verdict to the exact proposal it judged (keymaster refuses a mismatch)."""
+    return canonical_hash(p.model_dump(mode="json"))
+
+
 class Finding(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=True)
     rule: str
-    severity: str
+    severity: Severity
     statement_sid: str | None = None
     detail: str = ""
     fix: str | None = None
@@ -96,6 +109,7 @@ class LeaseVerdict(_Strict):
     score: int = Field(ge=0, le=100)
     findings: list[Finding] = Field(default_factory=list, max_length=50)
     aws_validation: Literal["pass", "findings", "skipped"]
+    proposal_hash: ProposalHash
 
 
 class ReviewRequest(_Strict):

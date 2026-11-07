@@ -13,34 +13,32 @@ import asyncio
 import contextlib
 import signal
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from leasedesk.common.logging import configure_logging, get_logger
+from leasedesk.common.policy import PolicyLoader, file_fetcher
 from leasedesk.config import Settings
 from leasedesk.keymaster.executor import Executor, ExecutorError, make_executor
-from leasedesk.keymaster.policy import PolicyLoader, file_fetcher
 from leasedesk.keymaster.service import Keymaster
 from leasedesk.keymaster.store import LeaseStore
-from leasedesk.switch.connection import ExitReason, RoomConnection
+from leasedesk.switch.connection import RoomConnection
 from leasedesk.switch.credentials import AgentCredentials, load_credentials
-from leasedesk.switch.errors import SwitchError
+from leasedesk.switch.documents import person_document_fetcher as document_fetcher
+from leasedesk.switch.exits import (  # noqa: F401 - re-exported for tests and docs
+    EXIT_AUTH,
+    EXIT_CODES,
+    EXIT_CONFIG,
+    EXIT_ERROR,
+    EXIT_OK,
+    EXIT_TAKEN_OVER,
+)
 from leasedesk.switch.ops import OpsClient
 
 log = get_logger(__name__)
 
-EXIT_OK = 0
-EXIT_ERROR = 1
-EXIT_CONFIG = 2
-EXIT_TAKEN_OVER = 3
-EXIT_AUTH = 4
-EXIT_CODES = {
-    ExitReason.STOPPED: EXIT_OK,
-    ExitReason.TAKEN_OVER: EXIT_TAKEN_OVER,
-    ExitReason.AUTH_FAILED: EXIT_AUTH,
-}
 POLICY_REFRESH_S = 300.0
 POLICY_RETRY_S = 5.0
 
@@ -51,40 +49,6 @@ def config_problem(settings: Settings) -> str | None:
     if not settings.switch_base_url:
         return "SWITCH_BASE_URL isn't set (see .env.example)."
     return None
-
-
-def document_fetcher(km: Callable[[], Keymaster], name: str) -> Callable[[], Awaitable[str]]:
-    """Read the person-written library document ``name`` through any ready room connection.
-
-    Only documents with ``created_by_agent_id`` null count, so no agent (including a
-    prompt-injected one) can write the policy keymaster enforces.
-    """
-
-    async def fetch() -> str:
-        agent = km()
-        ready = [s for s in agent.sessions.values() if s.ready.is_set()]
-        if not ready:
-            raise LookupError("not connected to any room yet")
-        found: dict[str, str] = {}  # document id -> connection id to load it through
-        try:
-            for session in ready:
-                refs = await agent.ops.list_references(connection_id=session.connection_id)
-                for d in refs.documents:
-                    if d.name == name and d.created_by_agent_id is None:
-                        found.setdefault(d.id, session.connection_id)
-            if not found:
-                raise LookupError(f"no person-written document named {name} is attached to me")
-            if len(found) > 1:
-                raise LookupError(f"more than one document is named {name}; keep one")
-            ((doc_id, connection_id),) = found.items()
-            loaded = await agent.ops.load_internal_documents([doc_id], connection_id=connection_id)
-        except SwitchError as exc:
-            raise LookupError(f"couldn't read {name}: {exc.detail}") from exc
-        if not loaded:
-            raise LookupError(f"{name} came back empty")
-        return loaded[0].content
-
-    return fetch
 
 
 async def keep_policy_fresh(km: Keymaster) -> None:

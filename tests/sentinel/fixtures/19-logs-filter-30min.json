@@ -1,0 +1,28 @@
+{
+  "name": "19-logs-filter-30min",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read the app logs to debug the 2am error",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 30,
+    "statements": [
+      {
+        "sid": "Logs",
+        "actions": [
+          "logs:FilterLogEvents"
+        ],
+        "resources": [
+          "arn:aws:logs:us-east-1:123456789012:log-group:/leasedesk/app:*"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "LOW",
+    "rules": [
+      "access-read-list"
+    ]
+  }
+}

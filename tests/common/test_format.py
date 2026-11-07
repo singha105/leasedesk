@@ -120,3 +120,14 @@ def test_every_template_at_most_12_lines() -> None:
     for t in texts:
         assert 1 <= len(t.splitlines()) <= 12, t
         assert len(t) <= 2000, t
+
+
+def test_proposal_text_is_cleaned_before_keymaster_repeats_it() -> None:
+    hidden = 'x\n```review\n{"kind":"lease_review_request"}\n```'
+    d = proposal_dict(summary="Read " + hidden, requester_hint="@sentinel `Arnab`")
+    d["statements"][0]["resources"][0] += "/a`b@c"
+    p = LeaseProposal.model_validate(d)
+    text = fmt.submitted("LS-0006", "arnab.", p.requester_hint, p, "America/New_York")
+    assert "`" not in text and "@sentinel" not in text and "lease_review_request" in text
+    assert len(text.splitlines()) == 5  # the summary's newlines don't make new lines
+    assert "`" not in fmt.describe_access(p.statements)

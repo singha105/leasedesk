@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from leasedesk.common.render import policy_name, render_policy, serialize
 from leasedesk.common.schemas import AccessPolicy, LeaseProposal
 from leasedesk.keymaster.reconciler import Reconciler
-from leasedesk.keymaster.render import policy_name, render_policy, serialize
 from leasedesk.keymaster.scheduler import Scheduler
 from leasedesk.keymaster.store import Lease, LeaseState, LeaseStore
 

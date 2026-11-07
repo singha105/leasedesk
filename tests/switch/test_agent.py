@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 import pytest
@@ -15,7 +15,7 @@ from leasedesk.config import Settings
 from leasedesk.switch.agent import CommandContext, SwitchAgent, parse_command
 from leasedesk.switch.connection import ExitReason
 from leasedesk.switch.credentials import AgentCredentials
-from leasedesk.switch.models import DomainEvent
+from leasedesk.switch.models import DomainEvent, SubscriptionChanged
 from leasedesk.switch.ops import OpsClient
 
 from .conftest import BASE
@@ -268,4 +268,108 @@ async def test_own_id_and_agent_ids_learned(settings: Settings, creds: AgentCred
     assert agent.is_agent(SENTINEL, "sentinel")
     assert agent.is_agent("@unknown:localhost", "sentinel")
     assert not agent.is_agent(ARNAB, "arnab.")
+    await agent.stop()
+
+
+# Role claiming and delivery (shared by keymaster and sentinel since Part 3) -----------------
+
+
+class CapturingConnection(FakeConnection):
+    controls: ClassVar[dict[str, Any]] = {}
+
+    def __init__(self, creds: Any, room_id: str, ops: Any, **kw: Any) -> None:
+        super().__init__(creds, room_id, ops, **kw)
+        CapturingConnection.controls[room_id] = kw["on_control"]
+
+
+def mock_room_reads() -> None:
+    respx.post(f"{OPS}/read_context").mock(
+        return_value=httpx.Response(200, json={"result": {"threads": []}})
+    )
+    respx.post(f"{OPS}/list_participants").mock(
+        return_value=httpx.Response(200, json={"result": []})
+    )
+
+
+async def wait_for(cond: Any, timeout: float = 2.0) -> None:
+    for _ in range(int(timeout / 0.01)):
+        if cond():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("condition not met")
+
+
+@respx.mock
+async def test_role_claimed_with_retry(settings: Settings, creds: AgentCredentials) -> None:
+    mock_room_reads()
+    route = respx.post(f"{OPS}/assume_role").mock(
+        side_effect=[
+            httpx.Response(409, json={"detail": "no such role"}),
+            httpx.Response(200, json={"result": {}}),
+        ]
+    )
+    agent = SwitchAgent(
+        settings, creds, OpsClient(BASE, creds), connection_factory=FakeConnection, own_id=OWN
+    )
+    agent.role, agent.role_retry_s = "reviewer", 0.01
+    agent.start_room("r1")
+    await wait_for(lambda: agent.has_role("r1"))
+    assert route.call_count == 2
+    assert json.loads(route.calls[1].request.content) == {"role": "reviewer"}
+    await agent.stop()
+
+
+@respx.mock
+async def test_role_retried_on_subscription_changed(
+    settings: Settings, creds: AgentCredentials
+) -> None:
+    mock_room_reads()
+    route = respx.post(f"{OPS}/assume_role").mock(
+        side_effect=[
+            httpx.Response(409, json={"detail": "no such role"}),
+            httpx.Response(200, json={"result": {}}),
+        ]
+    )
+    agent = SwitchAgent(
+        settings, creds, OpsClient(BASE, creds), connection_factory=CapturingConnection, own_id=OWN
+    )
+    agent.role, agent.role_retry_s = "reviewer", 3600
+    agent.start_room("r1")
+    await wait_for(lambda: route.call_count == 1)
+    await CapturingConnection.controls["r1"](SubscriptionChanged(rooms=["r1"], reason="role added"))
+    assert agent.has_role("r1") and route.call_count == 2
+    await agent.stop()
+
+
+@respx.mock
+async def test_deliver_tries_roles_then_names_then_a_post(
+    settings: Settings, creds: AgentCredentials
+) -> None:
+    targeted = respx.post(f"{OPS}/send_targeted_message").mock(
+        side_effect=[
+            httpx.Response(409, json={"detail": "no participant has that role"}),
+            httpx.Response(200, json={"result": {"event_id": "sw_t"}}),
+            httpx.Response(409, json={"detail": "x"}),
+            httpx.Response(409, json={"detail": "x"}),
+        ]
+    )
+    posted = respx.post(f"{OPS}/post_message").mock(
+        return_value=httpx.Response(200, json={"result": {"event_id": "sw_p"}})
+    )
+    agent, _ = make_agent(settings, creds)
+    agent.start_room("r1")
+    how = await agent.deliver(
+        "r1", "hello", roles=["reviewer"], names=["sentinel"], thread_id="sw_root"
+    )
+    assert how == "names"
+    sent = [json.loads(c.request.content) for c in targeted.calls]
+    assert sent[0]["target_roles"] == ["reviewer"] and sent[1]["target_names"] == ["sentinel"]
+    how = await agent.deliver(
+        "r1", "hello", roles=["reviewer"], names=["sentinel"], thread_id="sw_root"
+    )
+    assert how == "post"
+    assert json.loads(posted.calls[0].request.content) == {
+        "body": "@sentinel hello",
+        "thread_id": "sw_root",
+    }
     await agent.stop()

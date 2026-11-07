@@ -6,6 +6,12 @@
       "Effect": "Allow",
       "Action": "access-analyzer:ValidatePolicy",
       "Resource": "*"
+    },
+    {
+      "Sid": "PaidCrownJewelCheck",
+      "Effect": "Allow",
+      "Action": "access-analyzer:CheckAccessNotGranted",
+      "Resource": "*"
     }
   ]
 }

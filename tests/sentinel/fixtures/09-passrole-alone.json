@@ -1,0 +1,29 @@
+{
+  "name": "09-passrole-alone",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "Pass",
+        "actions": [
+          "iam:PassRole"
+        ],
+        "resources": [
+          "arn:aws:iam::123456789012:role/leasedesk-demo-runner"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "BLOCK",
+    "rules": [
+      "forbidden-action",
+      "escalation-near-miss"
+    ]
+  }
+}

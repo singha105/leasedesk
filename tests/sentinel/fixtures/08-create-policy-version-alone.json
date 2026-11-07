@@ -1,0 +1,29 @@
+{
+  "name": "08-create-policy-version-alone",
+  "proposal": {
+    "kind": "lease_proposal",
+    "version": 1,
+    "requester_hint": "Arnab",
+    "summary": "Read October invoice exports to debug the billing report",
+    "justification": "Debugging ticket BILL-142; report totals are off",
+    "duration_minutes": 60,
+    "statements": [
+      {
+        "sid": "Pol",
+        "actions": [
+          "iam:CreatePolicyVersion"
+        ],
+        "resources": [
+          "arn:aws:iam::123456789012:policy/leasedesk-demo-x"
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "risk": "BLOCK",
+    "rules": [
+      "escalation-rhino-1-create-policy-version",
+      "forbidden-action"
+    ]
+  }
+}

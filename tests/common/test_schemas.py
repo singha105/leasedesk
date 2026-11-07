@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from leasedesk.common.schemas import AccessPolicy, LeaseProposal, LeaseVerdict, ReviewRequest
+from leasedesk.common.schemas import (
+    AccessPolicy,
+    LeaseProposal,
+    LeaseVerdict,
+    ReviewRequest,
+    proposal_hash,
+)
 
 from .conftest import proposal_dict
 
@@ -111,6 +118,7 @@ def test_verdict_schema() -> None:
                 }
             ],
             "aws_validation": "pass",
+            "proposal_hash": "sha256:" + "b" * 64,
         }
     )
     assert v.findings[0].rule == "wildcard-resource"
@@ -162,3 +170,30 @@ def test_access_policy_parses_and_hashes() -> None:
 def test_access_policy_typo_rejected() -> None:
     with pytest.raises(ValidationError):
         AccessPolicy.model_validate({**POLICY, "aprovers": []})
+
+
+def test_proposal_hash_is_stable_and_sensitive(proposal: dict[str, Any]) -> None:
+    a = LeaseProposal.model_validate(proposal)
+    b = LeaseProposal.model_validate(json.loads(json.dumps(proposal)))
+    assert proposal_hash(a) == proposal_hash(b)
+    assert proposal_hash(a).startswith("sha256:") and len(proposal_hash(a)) == 71
+    changed = LeaseProposal.model_validate({**proposal, "duration_minutes": 61})
+    assert proposal_hash(changed) != proposal_hash(a)
+
+
+def test_verdict_requires_proposal_hash_and_known_severity() -> None:
+    base = {
+        "kind": "lease_verdict",
+        "version": 1,
+        "lease_id": "LS-0007",
+        "risk": "LOW",
+        "score": 3,
+        "findings": [],
+        "aws_validation": "skipped",
+    }
+    with pytest.raises(ValidationError):
+        LeaseVerdict.model_validate(base)
+    ok = {**base, "proposal_hash": "sha256:" + "a" * 64}
+    assert LeaseVerdict.model_validate(ok).proposal_hash.startswith("sha256:")
+    with pytest.raises(ValidationError):
+        LeaseVerdict.model_validate({**ok, "findings": [{"rule": "x", "severity": "SEVERE"}]})

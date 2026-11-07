@@ -7,11 +7,12 @@ import json
 from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
-from leasedesk.keymaster.render import policy_name
+from leasedesk.common.render import policy_name
 from leasedesk.keymaster.store import LeaseState
 
-from .conftest import ARNAB, EVE, PRIYA, SAM, SCRIBE, Clock
+from .conftest import ARNAB, EVE, PRIYA, SAM, SCRIBE, SENTINEL, Clock
 from .harness import DESK, SEC, Harness
 
 S = LeaseState
@@ -460,3 +461,83 @@ async def test_dev_fake_verdict_ignored_in_real_mode(tmp_path: Path, clock: Cloc
     await h.say(ARNAB, f"@keymaster confirm {lease_id}")
     assert h.state(lease_id) is S.UNDER_REVIEW
     assert not any("DEV ONLY" in t for t in h.km.texts())
+
+
+# Part 3: trust pinning ----------------------------------------------------------------------
+
+
+async def pinned(tmp_path: Path, clock: Clock) -> Harness:
+    h = Harness(tmp_path, clock)
+    h.km.settings.sentinel_id = SENTINEL
+    await h.start()
+    return h
+
+
+async def test_verdict_from_scribe_ignored_when_pinned(tmp_path: Path, clock: Clock) -> None:
+    h = await pinned(tmp_path, clock)
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}")
+    await h.verdict(lease_id, "LOW", sender=SCRIBE, name="scribe")
+    assert h.state(lease_id) is S.UNDER_REVIEW
+    assert "only sentinel" in h.km.last()
+
+
+async def test_verdict_from_human_ignored_and_logged(tmp_path: Path, clock: Clock) -> None:
+    h = await pinned(tmp_path, clock)
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}")
+    with capture_logs() as logs:
+        await h.verdict(lease_id, "LOW", sender=PRIYA, name="sentinel")
+    assert h.state(lease_id) is S.UNDER_REVIEW
+    wrong = [e for e in logs if e["event"] == "verdict_from_wrong_sender"]
+    assert wrong and wrong[0]["sender"] == PRIYA
+
+
+async def test_verdict_with_wrong_proposal_hash_refused(tmp_path: Path, clock: Clock) -> None:
+    h = await pinned(tmp_path, clock)
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}")
+    await h.verdict(lease_id, "LOW", phash="sha256:" + "0" * 64)
+    assert h.state(lease_id) is S.UNDER_REVIEW
+    assert "different proposal" in h.km.last()
+    await h.verdict(lease_id, "LOW")
+    assert h.state(lease_id) is S.AWAITING_APPROVAL
+
+
+async def test_unaddressed_verdict_from_pinned_sentinel_applied(
+    tmp_path: Path, clock: Clock
+) -> None:
+    h = await pinned(tmp_path, clock)
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}")
+    await h.verdict(lease_id, "LOW", addressed=False)
+    assert h.state(lease_id) is S.AWAITING_APPROVAL
+
+
+async def test_unaddressed_verdict_from_others_ignored_silently(
+    tmp_path: Path, clock: Clock
+) -> None:
+    h = await pinned(tmp_path, clock)
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}")
+    sent = len(h.km.sent)
+    await h.verdict(lease_id, "LOW", sender=PRIYA, addressed=False)
+    assert h.state(lease_id) is S.UNDER_REVIEW
+    assert len(h.km.sent) == sent
+
+
+@pytest.mark.parametrize(
+    ("refused", "starts"),
+    [(set(), "@reviewer"), ({"roles"}, "@sentinel"), ({"roles", "names"}, "@sentinel")],
+)
+async def test_review_request_delivery_falls_back(
+    h: Harness, refused: set[str], starts: str
+) -> None:
+    h.km.refuse_targets = refused
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}")
+    review = [(thread, t) for _, thread, t in h.km.sent if "```review" in t]
+    assert len(review) == 1
+    thread, text = review[0]
+    assert text.startswith(starts) and thread == h.lease(lease_id).thread_id
+    assert h.state(lease_id) is S.UNDER_REVIEW
