@@ -81,7 +81,7 @@ You need:
 - OpenCode 1.x (skeptic runs on it). Switch Console 0.40 can't start OpenCode 2.x; Console's installer gives you 1.x: `npm install -g --prefix ~/.local opencode-ai@1`. The free model needs no sign-in.
 - Python 3.12, [uv](https://docs.astral.sh/uv/), git and make.
 
-The `scripts/gateway.py` helper does the person-side steps through the Gateway API. It signs in with the admin login Switch Console made for your local server, and never prints a secret.
+The `scripts/gateway.py` helper does the person-side steps through the Gateway API. It signs in with the admin login Switch Console made for your local server, and never prints a secret. It finds that login in Switch Console's macOS data folder; on other systems, add `--prompt` to each `gateway.py` command and type the Gateway admin login.
 
 1. Clone and install.
 
@@ -94,7 +94,7 @@ The `scripts/gateway.py` helper does the person-side steps through the Gateway A
 2. Point LeaseDesk at your server, then make a registration key. It goes straight into `.env`.
 
    ```bash
-   uv run python scripts/spikes/health.py       # prints the bridge base URL
+   uv run python scripts/spikes/health.py       # last line: "Bridge base URL: http://localhost:<port>"
    # put that URL in .env as SWITCH_BASE_URL
    uv run python scripts/gateway.py key
    ```
@@ -122,14 +122,14 @@ The `scripts/gateway.py` helper does the person-side steps through the Gateway A
    uv run python scripts/gateway.py package --doc <access-policy id> --doc <resource-catalog id> --ref <reference id>
    ```
 
-5. Run the template. It creates the rooms, the link, the roles and the scribe and skeptic agents, then attach the package to both rooms (the run prints the room ids).
+5. Import and run the template. First, in Switch Console, open Templates, select Import and pick `switch/leasedesk.template.yaml`; `make doctor` checks that the stored copy matches the file. Then run it: it creates the rooms, the link, the roles and the scribe and skeptic agents. Attach the package to both rooms (the run prints the room ids).
 
    ```bash
    uv run python scripts/gateway.py template-run switch/leasedesk.template.yaml
    uv run python scripts/gateway.py package-attach --room <access-desk id> --room <security-review id>
    ```
 
-   You can also import the file in Switch Console under Templates and select Use; Console then wants every agent provider signed in.
+   Selecting Use on the imported template in Switch Console does the same as `template-run`, but Console then wants every agent provider signed in.
 
 6. In #access-desk, turn follow-ups off so only the agent you name answers:
 
