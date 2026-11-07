@@ -11,6 +11,8 @@ Just-in-time AWS access, asked for in plain English in a Switch room, approved b
 
 ![LeaseDesk in under a minute: a request in chat, a drafted policy, two reviewers, an approval, then access that expires on its own](docs/media/leasedesk.gif)
 
+The narrated two-minute walkthrough is on YouTube: [LeaseDesk demo](https://youtu.be/d0pSl1Rz9eI).
+
 ## The problem
 
 Engineers need short-lived cloud access to debug, and a ticket takes hours or days. So teams hand out standing admin access, and nobody takes it back. LeaseDesk keeps the whole loop in the chat the team already uses: AI drafts and critiques the request, a person decides, and the access ends at a time written into the IAM policy.

@@ -30,4 +30,5 @@ Adjusted to what the live scenarios showed on 2026-11-07 (docs/SCENARIOS.md). Ti
 - Add captions.
 - Upload to YouTube as unlisted, then open the link in a logged-out browser to check it plays.
 - Check the submission form for a length limit before the final cut.
-- The README GIF (`docs/media/leasedesk.gif`, about 50 seconds) is built from captures of the live runs. Swap in a cut of the video if you like; keep it under 10 MB.
+- The README GIF (`docs/media/leasedesk.gif`, about 50 seconds) is built from captures of the live runs. Rebuild it with `python3 scripts/design/make_gif.py`.
+- The submitted video (https://youtu.be/d0pSl1Rz9eI, 2 min 14 s, unlisted) is not a screen recording: it is the ten GIF frames at 1920x1080, one narration line per frame, read by the en-US-AndrewNeural voice (`edge-tts`) and joined with `ffmpeg`. Everything it shows comes from the live runs in docs/SCENARIOS.md. A screen recording that follows the script above can replace it.

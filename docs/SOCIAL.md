@@ -12,10 +12,10 @@ Attach: a screenshot of #access-desk with a request and scribe's first draft (cr
 
 > Asked my access desk for iam:PassRole + lambda:CreateFunction. sentinel blocked it and named the privilege-escalation path. No LLM in the gate, just rules. #HowISwitch
 
-Attach: `docs/media/block.png`, sentinel's BLOCK with the `@sentinel explain` reply naming Rhino Security Labs method 15.
+Attach: `docs/media/print-block.png` (the framed print of `docs/media/block.png`), sentinel's BLOCK with the `@sentinel explain` reply naming Rhino Security Labs method 15.
 
 ## Saturday (launch)
 
-> LeaseDesk is live: ask for AWS access in chat, 4 agents on @SwitchAgents draft and review it, a person approves, and AWS ends it on time even if the agents are down. 3-min demo: <VIDEO_URL> Code: <REPO_URL> #HowISwitch
+> LeaseDesk is live: ask for AWS access in chat, 4 agents on @SwitchAgents draft and review it, a person approves, and AWS ends it on time even if the agents are down. 2-min demo: https://youtu.be/d0pSl1Rz9eI Code: https://github.com/singha105/leasedesk #HowISwitch
 
-Attach: `docs/media/leasedesk.gif` (about 50 seconds). Check the length after filling in the links (links count as 23 characters each on X), and check that @SwitchAgents is Switch's real handle before posting; drop it if not.
+Attach: `docs/media/leasedesk.gif` (about 50 seconds). The post is 243 characters on X (each link counts as 23); check that @SwitchAgents is Switch's real handle before posting; drop it if not.

@@ -83,7 +83,7 @@ prints() {
     shot print 840 "$height" "print-$name" "?img=$name&caption=$("$PY" -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$caption")"
     quantize "$OUT/print-$name.png" "$MEDIA/print-$name.png" 256
   done <<'EOF'
-happy-path|Approved in chat, active for five minutes, ended by AWS on time
+happy-path|Approved in chat, active for five minutes, expired on time
 block|sentinel blocks PassRole with Lambda and names the escalation path
 escalation|A HIGH-risk lease, approved by the security group in its own room
 freeze|One command revokes every active lease and blocks new ones
