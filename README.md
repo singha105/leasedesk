@@ -5,7 +5,10 @@ Just-in-time AWS access, asked for in plain English in a Switch room, approved b
 [![tests](https://github.com/singha105/leasedesk/actions/workflows/ci.yml/badge.svg)](https://github.com/singha105/leasedesk/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+<!-- Demo GIF goes here once recorded (docs/media/leasedesk.gif, under 10 MB):
 ![LeaseDesk in 90 seconds: a request in chat, two reviewers, an approval, then access that expires on its own](docs/media/leasedesk.gif)
+-->
+![A lease in Discord: keymaster asks for approval, it goes ACTIVE, skeptic adds a note, and the lease expires on time](docs/media/happy-path.png)
 
 ## The problem
 
@@ -225,7 +228,7 @@ All eight live scenarios passed on 2026-11-07, one of them on real AWS. Times an
 
 | The happy path | The block |
 | - | - |
-| ![A lease from request to ALLOWED](docs/media/happy-path.png) | ![sentinel blocks a privilege-escalation path](docs/media/block.png) |
+| ![A lease from approval to expiry](docs/media/happy-path.png) | ![sentinel blocks a privilege-escalation path](docs/media/block.png) |
 | **The escalation** | **The freeze** |
 | ![A HIGH lease approved in security-review](docs/media/escalation.png) | ![freeze revokes every active lease](docs/media/freeze.png) |
 

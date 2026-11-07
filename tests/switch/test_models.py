@@ -16,7 +16,7 @@ from leasedesk.switch.models import (
 )
 
 ROOM = "a4580f7c-088f-4a09-bc04-a1049657d105"
-SENDER = "@switch-discord-36e05d34-8d5d-4564-9f88-86e9775fb038-piggyback101:localhost"
+SENDER = "@switch-discord-00000000-0000-4000-8000-0000000000b1-alice:localhost"
 
 MENTIONED = {
     "event": "message",
@@ -24,12 +24,12 @@ MENTIONED = {
     "data": {
         "type": "message",
         "room_id": ROOM,
-        "bridge_id": "36e05d34-8d5d-4564-9f88-86e9775fb038",
+        "bridge_id": "00000000-0000-4000-8000-0000000000b1",
         "channel_type": "channel_public",
         "payload": {
             "addressed": True,
             "sender": SENDER,
-            "sender_name": "piggyback101.",
+            "sender_name": "alice.",
             "sender_kind": None,
             "on_behalf_of": None,
             "message_id": "sw_d8dc9d3bb835a777136eeb3e9b8cf00c",
@@ -81,7 +81,7 @@ def test_non_message_event_has_no_message() -> None:
     frame = json.loads(json.dumps(MENTIONED))
     frame["event"] = "room_join"
     frame["data"]["type"] = "room_join"
-    frame["data"]["payload"] = {"sender": SENDER, "sender_name": "piggyback101."}
+    frame["data"]["payload"] = {"sender": SENDER, "sender_name": "alice."}
     ev = parse_frame(json.dumps(frame))
     assert isinstance(ev, DomainEvent)
     assert ev.message() is None

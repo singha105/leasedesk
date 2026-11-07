@@ -1,7 +1,8 @@
 # Protocol notes
 
 What the live Switch server actually does, recorded from the Part 1 spikes. Each entry has the
-observation time (ET), a raw example (secrets redacted, long strings cut with `…`) and the
+observation time (ET), a raw example (secrets redacted, long strings cut with `…`, participant ids,
+usernames and Discord ids replaced with `<placeholders>`; the shapes are real) and the
 takeaways. Where an entry still says **PENDING**, it has not been seen on the wire yet; do not
 build on it.
 
@@ -29,7 +30,7 @@ Raw request: `{"name": "leasedesk-probe", "description": "LeaseDesk protocol pro
 "connector_type": "leasedesk-python", "integration_profile": {"connection_model": "always_on",
 "message_exchange": true, "pre_invocation_mediation": [], "post_invocation_mediation": [],
 "event_reporting": []}}` with `Authorization: Bearer <registration key>`
-Raw response: `200 {"id": "23e2b36d-e384-42bd-87f0-751d6fccf81b", "api_key": "[REDACTED]"}`
+Raw response: `200 {"id": "<agent-uuid>", "api_key": "[REDACTED]"}`
 Takeaways: status is 200, not 201. Exactly two keys. The key is 43 chars (token_urlsafe(32)).
 
 ### POST /agents, name taken
@@ -40,7 +41,7 @@ treat 409 as "already registered, use the saved key".
 
 ### Side effects of registering
 Observed: 2026-11-03 23:43
-Raw (`read_context` in Mattermost Off-Topic): `room_join` by `@switch-agent-21ae68a7:localhost`
+Raw (`read_context` in Mattermost Off-Topic): `room_join` by `@switch-agent-<8-hex>:localhost`
 ("leasedesk-probe joined the room"), `room_join` by `@switch-admin:localhost`, then a message
 from the probe's own id: `"Hey! Ping @leasedesk-probe and I'll jump in."`
 Takeaways: a new agent is auto-added to the bundled Mattermost rooms and Switch posts a greeting
@@ -297,14 +298,14 @@ PENDING: `command`, `room_join` on the socket, `refused`, `room_released`, and c
 ## Message variants (Discord)
 
 Room `a4580f7c-088f-4a09-bc04-a1049657d105` ("LeaseDesk Demo: leasedesk-scratch", bridge
-`36e05d34-8d5d-4564-9f88-86e9775fb038`). Agent name autocomplete is on, so `@leasedesk-probe`
-in Discord is a role mention (role 1567406527541805096) that the bridge rewrites to the
+`<bridge-id>`). Agent name autocomplete is on, so `@leasedesk-probe`
+in Discord is a role mention (a Discord role id) that the bridge rewrites to the
 agent's name in `body`.
 
 ### Creating the room
 Observed: 2026-11-04 00:15
 Raw: the first message in a fresh channel auto-creates the room (`Auto-created channel_public
-room … for LeaseDesk Demo channel 1567404542956539976`). The bridge posts "I've linked this
+room … for LeaseDesk Demo channel <channel-id>`). The bridge posts "I've linked this
 channel to a new Switch room, but there are no agents in it yet…". `!invite-agent @leasedesk-probe`
 is run as the linked person (`admin`) and answered in a Discord thread: "Added
 **leasedesk-probe** to this room." In history the command message has `"body": null`. Joining
@@ -316,9 +317,9 @@ read it with `list_rooms` instead of hardcoding it. Expect the automatic greetin
 ### Mentioned, top level
 Observed: 2026-11-04 00:16
 Raw: `{"event": "message", "id": 9007194959773697, "data": {"type": "message", "room_id": "a4580f7c…",
-"bridge_id": "36e05d34…", "channel_type": "channel_public", "payload": {"addressed": true,
-"sender": "@switch-discord-36e05d34-8d5d-4564-9f88-86e9775fb038-piggyback101:localhost",
-"sender_name": "piggyback101.", "sender_kind": null, "on_behalf_of": null,
+"bridge_id": "<bridge-id>", "channel_type": "channel_public", "payload": {"addressed": true,
+"sender": "@switch-discord-<bridge-id>-<discord-user>:localhost",
+"sender_name": "<display-name>.", "sender_kind": null, "on_behalf_of": null,
 "message_id": "sw_d8dc9d3bb835a777136eeb3e9b8cf00c", "body": "@leasedesk-probe hello from Arnab",
 "timestamp": 1793769373247, "thread_id": null, "attachments": [], "opening_message": null,
 "sender_role": "owner"}, "sequence": 9007194959773697, "missed": {"count": 0, "reason": null}}}`
@@ -353,11 +354,11 @@ the root's `message_id`.
 
 ### Targeted message to a person
 Observed: 2026-11-04 00:18
-Raw: `send_targeted_message {"body": "…", "target_names": ["piggyback101."]}` ->
+Raw: `send_targeted_message {"body": "…", "target_names": ["<display-name>."]}` ->
 `200 {"result": {"event_id": "sw_16ab…", "target_statuses": {}}}`. Discord shows it as
-"@piggyback101 probe: targeted message…" (a real user mention).
+"@<discord-user> probe: targeted message…" (a real user mention).
 Takeaways: the target name is the Switch display name, **trailing dot included**
-(`piggyback101.`), not the Discord username. Read names from `list_participants`; don't type them.
+(`<display-name>.`), not the Discord username. Read names from `list_participants`; don't type them.
 
 ### With a file
 Observed: 2026-11-04 00:17 (spike-attachment.txt, 89 bytes, plus a mention)
@@ -432,16 +433,16 @@ the Gateway admin. `scripts/gateway.py library-doc` wraps both.
 Observed: 2026-11-04 00:23
 Raw: `POST /gateway/documents {"name": "human-note", "description": "…", "instructions": "…",
 "content": "…", "read_visibility": "public", "write_visibility": "private"}` -> `201 {"id": "7bc2…",
-"owner_id": "28cff49c-1376-45e0-8d41-9489104d35d0", "owner_name": "Admin", "read_visibility": "public",
+"owner_id": "<admin-user-uuid>", "owner_name": "Admin", "read_visibility": "public",
 "write_visibility": "private", "name": …, "content": …, "attached_rooms_count": 0, "packages": [],
 "scope": "global", "room_id": null, …}`; `POST /gateway/rooms/a4580f7c…/documents/7bc2…` -> `201`
 with the same document and `attached_rooms_count: 1`.
 Takeaways: Part 4's person-made library docs (policy text, runbooks) follow this path. The
-admin user id `28cff49c-…` is also the probe's `owner_id`.
+admin user id `<admin-user-uuid>` is also the probe's `owner_id`.
 
 ### Addressing set to anyone (owner step)
 Observed: 2026-11-04 00:23
-Raw: `PUT /gateway/agents/23e2…/addressing-policy {"policy": null}` -> `200 {…, "owner_id": "28cff49c…",
+Raw: `PUT /gateway/agents/<agent-uuid>/addressing-policy {"policy": null}` -> `200 {…, "owner_id": "<admin-user-uuid>",
 "owner_name": "Admin", "addressing_policy": null, "agent_type": "always_on", …}`
 Takeaways: the owner path works, as planned for `make register` in Part 2.
 
@@ -451,16 +452,16 @@ Two id spaces, and messages use only one of them:
 
 | who | `list_participants` / `connect_to_room` id | message `sender` | name |
 | - | - | - | - |
-| leasedesk-probe (agent) | `23e2b36d-e384-42bd-87f0-751d6fccf81b` (agent UUID) | `@switch-agent-21ae68a7:localhost` | `leasedesk-probe` |
-| Arnab on Discord (linked to admin) | `1f8da64d-f8d2-49d0-8ac7-6ff1853e11a6` | `@switch-discord-36e05d34-8d5d-4564-9f88-86e9775fb038-piggyback101:localhost` | `piggyback101.` |
+| leasedesk-probe (agent) | `<agent-uuid>` (agent UUID) | `@switch-agent-<8-hex>:localhost` | `leasedesk-probe` |
+| Arnab on Discord (linked to admin) | `<person-uuid>` | `@switch-discord-<bridge-id>-<discord-user>:localhost` | `<display-name>.` |
 | Gateway admin (Console) | not a participant | `@switch-admin:localhost` | `admin` |
-| Discord bridge | not a participant | `@switch-bridge-discord-leasedesk-demo-edddeb86:localhost` | `bridge-discord-LeaseDesk Demo` |
+| Discord bridge | not a participant | `@switch-bridge-discord-leasedesk-demo-<8-hex>:localhost` | `bridge-discord-LeaseDesk Demo` |
 
 Observed: 2026-11-04 00:18.
 Takeaways for the approver rule (spec: "a named human approves"): match the approver on the
 message `sender` string exactly, as an opaque id. **That string embeds the bridge id**:
 disconnecting and reconnecting Discord (done once on 2026-11-04 after a bad token) made a new
-bridge `36e05d34…` in place of `b45dbd45…`, so every Discord sender id changes when the app is
+bridge `<bridge-id>` in place of `b45dbd45…`, so every Discord sender id changes when the app is
 reconnected. LeaseDesk's approver list must be re-read after any reconnect, never baked into config.
 Participant UUIDs from `list_participants` don't appear in message frames.
 PENDING: the second account's ids.

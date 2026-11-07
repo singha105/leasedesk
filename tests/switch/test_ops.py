@@ -93,7 +93,7 @@ async def test_read_context_and_references_typed(creds: AgentCredentials) -> Non
                             "root": {
                                 "id": "sw_1",
                                 "kind": "room_join",
-                                "sender": "@switch-agent-21ae68a7:localhost",
+                                "sender": "@switch-agent-0000a1b2:localhost",
                                 "sender_name": "keymaster",
                                 "body": "keymaster joined the room",
                             },
