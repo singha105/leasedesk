@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LeaseDesk hero</title>
+    <!-- 1280 x 440, rendered at 2x to docs/media/hero.png -->
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      body {
+        width: 1280px;
+        height: 440px;
+        position: relative;
+      }
+      #art {
+        position: absolute;
+        inset: 0;
+      }
+      .title {
+        position: absolute;
+        left: 86px;
+        top: 96px;
+        width: 560px;
+      }
+      .mark {
+        display: flex;
+        align-items: flex-start;
+        gap: 22px;
+      }
+      .wordmark {
+        font-size: 150px;
+        letter-spacing: 1px;
+        margin-top: -6px;
+      }
+      .rule {
+        margin: 6px 0 20px 4px;
+        width: 380px;
+        height: 18px;
+      }
+      .caption {
+        font-size: 29px;
+        line-height: 1.3;
+        width: 520px;
+        margin-left: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <svg id="art" width="1280" height="440" viewBox="0 0 1280 440"></svg>
+    <div class="title">
+      <div class="mark">
+        <div class="wordmark">LeaseDesk</div>
+        <svg width="66" height="66" viewBox="0 0 66 66" id="seal"></svg>
+      </div>
+      <svg class="rule" viewBox="0 0 380 18" id="rule"></svg>
+      <div class="caption">
+        Just-in-time AWS access, asked for in a Switch room and ended by AWS itself
+      </div>
+    </div>
+    <script src="art.js"></script>
+    <script>
+      const W = 1280;
+      const H = 440;
+      const svg = document.getElementById("art");
+      const defs = E(svg, "defs");
+      const clip = E(defs, "clipPath", { id: "inside" });
+      E(clip, "path", { d: innerRule({ w: W, h: H, shrink: 1 }) });
+      const art = E(svg, "g", { "clip-path": "url(#inside)" });
+
+      sun(art, { cx: 1150, cy: 124, r: 60 });
+      kasumi(art, { x: 1060, y: 94, len: 170, h: 14, flip: true });
+
+      kasumi(art, { x: 588, y: 324, len: 214, h: 12 });
+      houseWave(art);
+      // the sea sits in front of the wave's foot, so the wave rises out of it
+      seigaiha(E(art, "g"), {
+        x0: 600,
+        y0: 362,
+        x1: W,
+        y1: H,
+        r: 21,
+        left: (y) => 770 - (y - 362) * 1.9,
+      });
+
+      frame(svg, { w: W, h: H });
+
+      seal(document.getElementById("seal"), { x: 3, y: 3, size: 60 });
+
+      // a small whiplash rule under the wordmark
+      const rule = document.getElementById("rule");
+      E(rule, "path", {
+        d: "M2 9 C60 9 90 2 130 6 C170 10 200 16 240 10 C280 4 330 9 378 9",
+        fill: "none",
+        stroke: PAL.kin,
+        "stroke-width": 1.6,
+        "stroke-linecap": "round",
+      });
+      E(rule, "circle", { cx: 130, cy: 6, r: 2.4, fill: PAL.kin });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LeaseDesk agents</title>
+    <!-- 1280 x 600, rendered at 2x to docs/media/agents.png -->
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      body {
+        width: 1280px;
+        height: 600px;
+      }
+    </style>
+  </head>
+  <body>
+    <svg id="art" width="1280" height="600" viewBox="0 0 1280 600"></svg>
+    <script src="art.js"></script>
+    <script>
+      const W = 1280;
+      const H = 600;
+      const PW = 260; // panel width
+      const PH = 500; // panel height
+      const GAP = 40;
+      const X0 = (W - 4 * PW - 3 * GAP) / 2;
+      const Y0 = 52;
+      const PAPER = "#F4ECD9"; // a lighter washi for the panel faces
+
+      const svg = document.getElementById("art");
+      const defs = E(svg, "defs");
+
+      const arch = (inset) => {
+        const r = PW / 2 - inset;
+        return `M${inset} ${PH - inset} L${inset} ${PW / 2} A${r} ${r} 0 0 1 ${PW - inset} ${PW / 2} L${PW - inset} ${PH - inset} Z`;
+      };
+
+      // a line drawn twice, ink under gold or paper, so it reads like a cut block line
+      function inked(g, d, w, color, ink = PAL.sumi, extra = 4) {
+        E(g, "path", { d, fill: "none", stroke: ink, "stroke-width": w + extra, "stroke-linecap": "round", "stroke-linejoin": "round" });
+        return () => E(g, "path", { d, fill: "none", stroke: color, "stroke-width": w, "stroke-linecap": "round", "stroke-linejoin": "round" });
+      }
+
+      function halo(g, { cx, cy, r, fill, opacity = 1 }) {
+        E(g, "circle", { cx, cy, r, fill, opacity });
+        E(g, "circle", { cx, cy, r, fill: "none", stroke: PAL.kin, "stroke-width": 2.2 });
+        E(g, "circle", { cx, cy, r: r - 10, fill: "none", stroke: PAL.kin, "stroke-width": 1 });
+        for (let a = 0; a < 360; a += 10) {
+          const t = (a * Math.PI) / 180;
+          E(g, "circle", { cx: cx + Math.cos(t) * (r - 5), cy: cy + Math.sin(t) * (r - 5), r: 1.5, fill: PAL.kin });
+        }
+      }
+
+      /* scribe: a brush laid across a half-open hand scroll */
+      function brushAndScroll(g) {
+        const ln = { stroke: PAL.ai, "stroke-width": 2.2, "stroke-linejoin": "round" };
+        E(g, "rect", { x: -64, y: -30, width: 116, height: 72, fill: PAPER, ...ln });
+        // brush marks in three columns, read right to left; not real characters
+        const ink = E(g, "g", { fill: "none", stroke: PAL.sumi, "stroke-linecap": "round" });
+        for (const [d, w] of [
+          ["M32 -20 L32 4", 4.5],
+          ["M25 11 Q32 14 39 9", 3.4],
+          ["M32 18 L30 32", 4.5],
+          ["M4 -18 L18 -20", 3.4],
+          ["M10 -13 L10 14", 4.5],
+          ["M3 23 Q10 27 17 22", 3.4],
+          ["M-14 -20 L-14 -5", 4.5],
+          ["M-21 1 L-7 -1", 3.4],
+          ["M-14 6 Q-16 22 -22 31", 4],
+        ]) {
+          E(ink, "path", { d, "stroke-width": w });
+        }
+        E(g, "rect", { x: -54, y: 22, width: 11, height: 11, fill: PAL.shu, rx: 1 });
+        // the roller on the left, the rolled part and its cover on the right
+        E(g, "rect", { x: -76, y: -40, width: 12, height: 92, rx: 4, fill: PAL.ai });
+        E(g, "rect", { x: -79, y: -48, width: 18, height: 9, rx: 3, fill: PAL.kin, ...ln, "stroke-width": 1.4 });
+        E(g, "rect", { x: -79, y: 51, width: 18, height: 9, rx: 3, fill: PAL.kin, ...ln, "stroke-width": 1.4 });
+        E(g, "rect", { x: 48, y: -36, width: 22, height: 84, rx: 6, fill: PAL.hanada, ...ln });
+        E(g, "path", { d: "M55 -34 L55 46 M63 -34 L63 46", stroke: PAL.washi, "stroke-width": 1.2 });
+        E(g, "rect", { x: 50, y: -44, width: 18, height: 9, rx: 3, fill: PAL.kin, ...ln, "stroke-width": 1.4 });
+        E(g, "rect", { x: 50, y: 47, width: 18, height: 9, rx: 3, fill: PAL.kin, ...ln, "stroke-width": 1.4 });
+        // the brush, tip down on the paper
+        const b = E(g, "g", { transform: "translate(-30 12) rotate(-44)" });
+        E(b, "rect", { x: 32, y: -5, width: 100, height: 10, rx: 5, fill: PAL.kin, stroke: PAL.sumi, "stroke-width": 1.8 });
+        E(b, "path", { d: "M70 -5 L70 5 M106 -5 L106 5", stroke: PAL.sumi, "stroke-width": 1.4 });
+        E(b, "rect", { x: 24, y: -6.5, width: 10, height: 13, rx: 1.5, fill: PAL.ai });
+        E(b, "path", { d: "M0 0 Q8 -7 25 -6.5 L25 6.5 Q8 7 0 0 Z", fill: PAL.sumi });
+        E(b, "circle", { cx: 134, cy: 0, r: 4, fill: PAL.sumi });
+      }
+
+      /* sentinel: a stone lantern with its light lit */
+      function stoneLantern(g) {
+        const st = { fill: PAPER, stroke: PAL.ai, "stroke-width": 2.2, "stroke-linejoin": "round" };
+        const shade = { fill: PAL.hanada };
+        E(g, "rect", { x: -48, y: 64, width: 96, height: 13, rx: 2, ...st });
+        E(g, "path", { d: "M-40 64 L-30 49 L30 49 L40 64 Z", ...st });
+        E(g, "path", { d: "M14 50 L30 50 L39 63 L18 63 Z", ...shade });
+        E(g, "rect", { x: -12, y: 4, width: 24, height: 46, ...st });
+        E(g, "rect", { x: 4, y: 6, width: 7, height: 42, ...shade });
+        E(g, "rect", { x: -15, y: 23, width: 30, height: 7, rx: 2, ...st });
+        E(g, "path", { d: "M-14 5 L-38 -5 L38 -5 L14 5 Z", ...st });
+        E(g, "rect", { x: -41, y: -13, width: 82, height: 9, rx: 2, ...st });
+        E(g, "rect", { x: -27, y: -50, width: 54, height: 38, ...st });
+        E(g, "rect", { x: 14, y: -48, width: 11, height: 34, ...shade });
+        E(g, "rect", { x: -11, y: -42, width: 22, height: 23, fill: PAL.kin, stroke: PAL.ai, "stroke-width": 1.6 });
+        E(g, "path", { d: "M0 -38 Q5 -31 0 -24 Q-5 -31 0 -38 Z", fill: PAPER });
+        // the roof, with fern-curl corners
+        E(g, "path", {
+          d: "M-64 -49 Q-68 -57 -59 -59 L-13 -75 Q0 -79 13 -75 L59 -59 Q68 -57 64 -49 Z",
+          fill: PAL.ai,
+          stroke: PAL.ai,
+          "stroke-width": 2.2,
+          "stroke-linejoin": "round",
+        });
+        for (const sx of [-1, 1]) {
+          E(g, "path", {
+            d: `M${sx * 60} -58 c${sx * 9} -3 ${sx * 13} -12 ${sx * 6} -17 c${sx * -5} -3 ${sx * -9} 3 ${sx * -4} 6`,
+            fill: "none",
+            stroke: PAL.ai,
+            "stroke-width": 2.2,
+            "stroke-linecap": "round",
+          });
+        }
+        E(g, "path", { d: "M-14 -76 Q0 -88 14 -76 Z", ...st });
+        E(g, "path", { d: "M0 -108 Q13 -93 8 -86 Q0 -80 -8 -86 Q-13 -93 0 -108 Z", ...st });
+      }
+
+      /* skeptic: a white fox mask with vermilion markings and a cord */
+      function kitsune(g) {
+        E(g, "path", { d: "M56 -26 Q80 -8 72 36", fill: "none", stroke: PAL.shu, "stroke-width": 2.6, "stroke-linecap": "round" });
+        E(g, "path", { d: "M68 34 L76 34 L79 58 L65 58 Z", fill: PAL.kin, stroke: PAL.sumi, "stroke-width": 1.2 });
+        E(g, "path", {
+          d:
+            "M-12 -52 L-46 -84 Q-52 -60 -56 -30 Q-63 -4 -46 18 Q-26 44 -8 66 Q0 74 8 66 " +
+            "Q26 44 46 18 Q63 -4 56 -30 Q52 -60 46 -84 L12 -52 Q0 -56 -12 -52 Z",
+          fill: PAPER,
+          stroke: PAL.sumi,
+          "stroke-width": 2.4,
+          "stroke-linejoin": "round",
+        });
+        for (const sx of [-1, 1]) {
+          const m = (x) => sx * x;
+          E(g, "path", { d: `M${m(16)} -56 L${m(41)} -74 Q${m(45)} -58 ${m(47)} -42 Q${m(32)} -50 ${m(16)} -56 Z`, fill: PAL.shu });
+          E(g, "path", { d: `M${m(40)} -12 Q${m(28)} -24 ${m(11)} -12 Q${m(28)} -9 ${m(40)} -12 Z`, fill: PAL.sumi });
+          E(g, "path", {
+            d: `M${m(12)} -20 Q${m(30)} -36 ${m(52)} -27`,
+            fill: "none",
+            stroke: PAL.shu,
+            "stroke-width": 4,
+            "stroke-linecap": "round",
+          });
+          E(g, "path", {
+            d: `M${m(36)} -4 Q${m(44)} -2 ${m(50)} -8`,
+            fill: "none",
+            stroke: PAL.shu,
+            "stroke-width": 2.6,
+            "stroke-linecap": "round",
+          });
+          for (const [x, y] of [
+            [30, 26],
+            [24, 33],
+            [35, 35],
+          ]) {
+            E(g, "circle", { cx: m(x), cy: y, r: 1.8, fill: PAL.sumi });
+          }
+        }
+        E(g, "path", { d: "M0 -47 Q8 -37 0 -25 Q-8 -37 0 -47 Z", fill: PAL.shu });
+        E(g, "ellipse", { cx: 0, cy: 61, rx: 6.5, ry: 4.5, fill: PAL.sumi });
+        E(g, "path", { d: "M-14 45 Q0 53 14 45", fill: "none", stroke: PAL.sumi, "stroke-width": 1.8, "stroke-linecap": "round" });
+      }
+
+      /* keymaster: an Art Nouveau key in gold, its bow a ginkgo inside a loop with whiplash curls */
+      function key(g) {
+        const bow =
+          "M0 -18 C-26 -20 -40 -42 -36 -60 C-32 -78 -14 -88 0 -88 C14 -88 32 -78 36 -60 C40 -42 26 -20 0 -18 Z";
+        const curls = [
+          "M0 -16 C-16 -12 -30 -20 -35 -8 C-38 2 -27 6 -23 -2",
+          "M0 -16 C16 -12 30 -20 35 -8 C38 2 27 6 23 -2",
+        ];
+        const lines = [bow, ...curls, "M-13 -8 L13 -8", "M-10 0 L10 0", "M0 -18 L0 70"];
+        const gold = lines.map((d) => inked(g, d, d === bow ? 6 : 5.5, PAL.kin));
+        gold.forEach((f) => f());
+        E(g, "path", {
+          d: "M0 -30 C-6 -38 -25 -50 -25 -63 Q-13 -75 -3 -71 L0 -60 L3 -71 Q13 -75 25 -63 C25 -50 6 -38 0 -30 Z",
+          fill: PAL.kin,
+          stroke: PAL.sumi,
+          "stroke-width": 1.8,
+          "stroke-linejoin": "round",
+        });
+        E(g, "path", { d: "M0 -34 L0 -56", stroke: PAL.sumi, "stroke-width": 1.2 });
+        E(g, "path", {
+          d: "M3 40 L30 40 L30 48 L21 48 L21 56 L30 56 L30 70 L3 70 Z",
+          fill: PAL.kin,
+          stroke: PAL.sumi,
+          "stroke-width": 2,
+          "stroke-linejoin": "round",
+        });
+        E(g, "circle", { cx: 0, cy: 74, r: 5, fill: PAL.kin, stroke: PAL.sumi, "stroke-width": 2 });
+      }
+
+      /* the name on a tanzaku: a narrow paper strip with indigo cloud ends and gold-leaf flecks */
+      function tanzaku(g, { x, y, w, h, name, seed }) {
+        E(g, "rect", { x, y, width: w, height: h, fill: PAPER, stroke: PAL.ai, "stroke-width": 1.8 });
+        const cloud = (sx) => {
+          const x0 = sx > 0 ? x : x + w;
+          const m = (d) => x0 + sx * d;
+          return (
+            `M${m(0)} ${y} L${m(26)} ${y} Q${m(16)} ${y + h * 0.22} ${m(24)} ${y + h * 0.4} ` +
+            `Q${m(32)} ${y + h * 0.58} ${m(20)} ${y + h * 0.76} Q${m(14)} ${y + h * 0.9} ${m(22)} ${y + h} L${m(0)} ${y + h} Z`
+          );
+        };
+        E(g, "path", { d: cloud(1), fill: PAL.ai });
+        E(g, "path", { d: cloud(-1), fill: PAL.ai });
+        const R = rng(seed);
+        for (let i = 0; i < 14; i++) {
+          const side = i % 2 ? 1 : -1;
+          const fx = side > 0 ? x + 30 + R() * 26 : x + w - 30 - R() * 26;
+          const fy = y + 6 + R() * (h - 12);
+          const s = 2 + R() * 2.5;
+          E(g, "rect", { x: fx, y: fy, width: s, height: s, fill: PAL.kin, transform: `rotate(${R() * 90} ${fx} ${fy})` });
+        }
+        E(g, "text", {
+          x: x + w / 2,
+          y: y + h / 2 + 2,
+          "text-anchor": "middle",
+          "dominant-baseline": "middle",
+          "font-family": "Bigelow Rules",
+          "font-size": 44,
+          fill: PAL.sumi,
+        }, name);
+      }
+
+      const agents = [
+        { name: "scribe", lines: ["drafts on Claude Code"], draw: brushAndScroll, halo: PAL.hanada, op: 0.46, s: 1.08 },
+        { name: "sentinel", lines: ["rules engine, no LLM"], draw: stoneLantern, halo: PAL.hanada, op: 0.46, s: 1.0 },
+        { name: "skeptic", lines: ["red-team on OpenCode"], draw: kitsune, halo: PAL.hanada, op: 0.46, s: 1.02 },
+        { name: "keymaster", lines: ["the only agent with", "AWS credentials"], draw: key, halo: PAL.shu, op: 1, s: 1.0 },
+      ];
+
+      agents.forEach((a, i) => {
+        const px = X0 + i * (PW + GAP);
+        const g = E(svg, "g", { transform: `translate(${px} ${Y0})` });
+        const cid = `panel-${i}`;
+        const cp = E(defs, "clipPath", { id: cid });
+        E(cp, "path", { d: arch(7) });
+        E(g, "path", { d: arch(0), fill: PAPER, stroke: PAL.kin, "stroke-width": 2.2 });
+        const inner = E(g, "g", { "clip-path": `url(#${cid})` });
+        halo(inner, { cx: PW / 2, cy: 150, r: 98, fill: a.halo, opacity: a.op });
+        a.draw(E(inner, "g", { transform: `translate(${PW / 2} 152) scale(${a.s})` }));
+        seigaiha(E(inner, "g"), { x0: 0, y0: 462, x1: PW, y1: PH, r: 13 });
+        E(g, "path", { d: arch(7), fill: "none", stroke: PAL.kin, "stroke-width": 1 });
+        // whiplash flourishes where the arch springs
+        for (const sx of [1, -1]) {
+          const x = sx > 0 ? 7 : PW - 7;
+          E(g, "path", {
+            d: `M${x} 150 C${x + sx * 10} 162 ${x + sx * 4} 178 ${x + sx * 16} 182 C${x + sx * 24} 184 ${x + sx * 24} 174 ${x + sx * 18} 174`,
+            fill: "none",
+            stroke: PAL.kin,
+            "stroke-width": 1.4,
+            "stroke-linecap": "round",
+          });
+        }
+        tanzaku(g, { x: 28, y: 288, w: PW - 56, h: 58, name: a.name, seed: 5 + i });
+        const top = a.lines.length === 1 ? 398 : 384;
+        a.lines.forEach((t, j) => {
+          E(g, "text", {
+            x: PW / 2,
+            y: top + j * 28,
+            "text-anchor": "middle",
+            "font-family": "Alegreya",
+            "font-style": "italic",
+            "font-size": 23,
+            fill: PAL.sumi,
+          }, t);
+        });
+      });
+
+      frame(svg, { w: W, h: H });
+    </script>
+  </body>
+</html>

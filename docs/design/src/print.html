@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LeaseDesk print</title>
+    <!-- A screenshot matted like a print: print.html?img=happy-path&caption=...
+         840 px wide; scripts/design/render.sh works out the height from the screenshot. -->
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      body {
+        width: 840px;
+        position: relative;
+      }
+      .mat {
+        position: relative;
+        padding: 40px 40px 0;
+      }
+      .mat::before {
+        content: "";
+        position: absolute;
+        inset: 9px;
+        border: 1px solid var(--kin);
+        pointer-events: none;
+      }
+      .plate {
+        position: relative;
+        width: 760px;
+        outline: 1.5px solid var(--kin);
+        outline-offset: 7px;
+        box-shadow: 0 0 0 1px var(--sumi);
+      }
+      .plate img {
+        display: block;
+        width: 760px;
+      }
+      .foot {
+        height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 0 0 2px;
+      }
+      .caption {
+        font-size: 27px;
+        line-height: 1.2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mat">
+      <div class="plate"><img id="shot" alt="" /></div>
+      <div class="foot">
+        <div class="caption" id="caption"></div>
+        <svg width="38" height="38" viewBox="0 0 38 38" id="seal"></svg>
+      </div>
+    </div>
+    <script src="art.js"></script>
+    <script>
+      const q = new URLSearchParams(location.search);
+      document.getElementById("shot").src = `../../media/${q.get("img")}.png`;
+      document.getElementById("caption").textContent = q.get("caption");
+      seal(document.getElementById("seal"), { x: 3, y: 3, size: 32, rot: 2 });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,63 @@
+/* Shared type and colour for the LeaseDesk design pages.
+   The fonts are downloaded into build/fonts/ by scripts/design/render.sh (they are not committed). */
+
+@font-face {
+  font-family: "Bigelow Rules";
+  src: url("../../../build/fonts/BigelowRules-Regular.ttf");
+}
+@font-face {
+  font-family: "Alegreya";
+  src: url("../../../build/fonts/Alegreya[wght].ttf");
+  font-weight: 400 900;
+}
+@font-face {
+  font-family: "Alegreya";
+  src: url("../../../build/fonts/Alegreya-Italic[wght].ttf");
+  font-weight: 400 900;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Shippori Mincho B1";
+  src: url("../../../build/fonts/ShipporiMinchoB1-ExtraBold.ttf");
+  font-weight: 800;
+}
+
+:root {
+  --washi: #ede3cc;
+  --sumi: #23201c;
+  --ai: #1c3f66;
+  --hanada: #7e9db5;
+  --shu: #b23a2b;
+  --kin: #a9843a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--washi);
+  color: var(--sumi);
+  font-family: "Alegreya", serif;
+}
+
+svg {
+  display: block;
+}
+
+.wordmark {
+  font-family: "Bigelow Rules", serif;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--sumi);
+}
+
+.caption {
+  font-family: "Alegreya", serif;
+  font-style: italic;
+  color: var(--sumi);
+}
