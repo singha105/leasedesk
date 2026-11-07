@@ -1,9 +1,13 @@
-# LeaseDesk
+<h1 align="center"><img src="docs/media/hero.png" alt="LeaseDesk" width="100%"></h1>
+
+<p align="center">
+  <a href="https://github.com/singha105/leasedesk/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/singha105/leasedesk/ci.yml?branch=main&style=flat-square&label=ci&labelColor=23201C&color=1C3F66"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-B23A2B?style=flat-square&labelColor=23201C"></a>
+  <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-7E9DB5?style=flat-square&labelColor=23201C">
+  <a href="https://switchagents.ai"><img alt="Built on Switch" src="https://img.shields.io/badge/built%20on-Switch-A9843A?style=flat-square&labelColor=23201C"></a>
+</p>
 
 Just-in-time AWS access, asked for in plain English in a Switch room, approved by a named person, and ended by AWS itself when the lease runs out.
-
-[![tests](https://github.com/singha105/leasedesk/actions/workflows/ci.yml/badge.svg)](https://github.com/singha105/leasedesk/actions/workflows/ci.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![LeaseDesk in under a minute: a request in chat, a drafted policy, two reviewers, an approval, then access that expires on its own](docs/media/leasedesk.gif)
 
@@ -36,6 +40,8 @@ sequenceDiagram
 ```
 
 Four agents, each with one job:
+
+<p align="center"><img src="docs/media/agents.png" alt="The four agents: scribe drafts on Claude Code, sentinel is a rules engine with no LLM, skeptic red-teams on OpenCode, and keymaster is the only agent with AWS credentials" width="100%"></p>
 
 | Agent | Runtime | Role | Model | AWS |
 | - | - | - | - | - |
@@ -225,9 +231,9 @@ All eight live scenarios passed on 2026-11-07, one of them on real AWS. Times an
 
 | The happy path | The block |
 | - | - |
-| ![A lease from approval to expiry](docs/media/happy-path.png) | ![sentinel blocks a privilege-escalation path](docs/media/block.png) |
+| [![A lease from approval to expiry](docs/media/print-happy-path.png)](docs/media/happy-path.png) | [![sentinel blocks a privilege-escalation path](docs/media/print-block.png)](docs/media/block.png) |
 | **The escalation** | **The freeze** |
-| ![A HIGH lease approved in security-review](docs/media/escalation.png) | ![freeze revokes every active lease](docs/media/freeze.png) |
+| [![A HIGH lease approved in security-review](docs/media/print-escalation.png)](docs/media/escalation.png) | [![freeze revokes every active lease](docs/media/print-freeze.png)](docs/media/freeze.png) |
 
 ## Architecture
 
