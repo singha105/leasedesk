@@ -519,3 +519,56 @@ of the room only by polling `list_rooms` (about 30 s later at most).
 `review_done` took 6.9 ms (LOW), 18.8 ms (HIGH, with a corrected lease) and 6.1 ms (BLOCK).
 From keymaster's review request to sentinel's verdict in the room took about 0.1 s.
 
+
+## Part 4 live run (2026-11-07)
+
+Switch Console 0.40.1, switch-core 0.31.0, LeaseDesk Demo Discord, keymaster and sentinel under
+`make up`.
+
+### Templates
+
+- `POST /gateway/templates/validate {"content": …}` checks a document without storing it. It
+  flags unused params but not unknown room keys or `advanced_config` keys.
+- Console's Import page stores the file as is: `GET /gateway/templates/{id}/content` came back
+  byte-identical. `PATCH /gateway/templates/{id} {"content": …}` replaces it (version +1).
+- Console's template page lists agents whose name is a param by the raw placeholder
+  (`{scribe_name}`), and no group row.
+- Console's Use form needs every provider's sign-in reported `ok`; the server's run refuses only
+  `missing` or `expired`. `POST /gateway/rooms/from-template-document {"template", "inputs": {},
+  "template_name"}` runs a v2 document as the signed-in person, fills defaults on the server and
+  answers 201 `{created_agents: [{slot, agent_id, name, machine: {id, name}, listening}],
+  room: {group_id, group_name, rooms: [{room_id, room_name, role_names, created_document_ids,
+  failed_attachments, …}], errors}}`. `scripts/gateway.py template-run` wraps it.
+- The kickoff lands as a thread "Template kickoff on behalf of @<creator>" plus a pointer
+  message in the channel; agents answer in the channel.
+- A second run in Console suggests "scribe 2" for a taken name.
+- Capture as template is `GET /gateway/rooms/{id}/yaml`: a v1 `room:` block with placeholders
+  filled, default visibilities spelled out, agents and roles sorted; no group, link, kickoff,
+  package or agent definitions. Saving it writes a local file, not a workspace template.
+
+### Roles: one lease per agent
+
+`assume_role` in a second room while holding a role in the first → 400 "You already hold a role
+lease; release it before assuming another" (`room_role_store.acquire_lease`: one live lease per
+agent across all rooms). Takeaway: only access-desk defines roles. `DELETE
+/gateway/rooms/{id}/roles/{name}` → 200 drops the role and its lease; the agent's 60 s retry then
+took the role in access-desk.
+
+### OpenCode provider
+
+The agent controller starts `opencode serve` and waits for a stdout line starting "opencode
+server listening"; OpenCode 2.2.6 (Homebrew) prints "server listening on …", so every skeptic
+session failed after 60 s ("[opencode] server did not start within 60000ms"). Console bundles
+`@opencode-ai/sdk ^1.18.27` and installs with `npm install -g --prefix "$HOME/.local"
+opencode-ai` (1.19.5). With 1.19.5 the controller reports auth `ok` with no sign-in (the free
+`opencode` backend counts as connected) and `opencode/big-pickle` answers. 1.19.5 can't open a
+2.x data folder ("Database is not empty and has no session table").
+
+### Packages and archived rooms
+
+- `POST /gateway/rooms/{id}/archive` → 200, metadata only (room, members, channel kept).
+  `list_rooms` marks it archived; keymaster and sentinel closed their connections within a
+  second (they skip archived rooms).
+- With the old rooms archived the person-written access-policy and resource-catalog reach the
+  agents only through the leasedesk-governance package; the 5-minute refreshes read them with no
+  warning, so package documents load by id like room documents.

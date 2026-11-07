@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 UV ?= uv
 
-.PHONY: help setup lint fmt test register run-keymaster run-sentinel review up doctor e2e-mock moto check-access
+.PHONY: help setup lint fmt test register run-keymaster run-sentinel review up doctor e2e-mock moto check-access template
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -23,7 +23,7 @@ fmt: ## Auto-fix lint and format
 test: ## Run the test suite
 	$(UV) run pytest
 
-doctor: ## Check tools, env, Switch health and credential file modes
+doctor: ## PASS/FAIL: file modes, Switch, agent keys, rooms, roles, package, policy docs, template, AWS profiles
 	$(UV) run python scripts/doctor.py
 
 register: ## Register keymaster and sentinel with Switch (idempotent; addressing anyone)
@@ -52,8 +52,11 @@ up: ## Mock demo: moto in the background, keymaster + sentinel supervised (Ctrl-
 	 echo "mock AWS up (logs/moto.log). Starting keymaster and sentinel..."; \
 	 LEASEDESK_AWS_MODE=mock $(UV) run python scripts/demo/supervise.py
 
-e2e-mock: ## End-to-end tests against moto (apply, simulate, expire)
-	$(UV) run pytest -m e2e
+template: ## Regenerate switch/leasedesk.template.yaml from switch/briefs/
+	$(UV) run python scripts/build_template.py
+
+e2e-mock: ## End-to-end in one process: real keymaster + sentinel on FakeSwitch and moto (< 60 s)
+	$(UV) run pytest -m e2e tests/e2e tests/keymaster/test_e2e_moto.py
 
 check-access: ## Demo helper: ALLOWED/DENIED for lease-demo-dev every 10 s
 	@scripts/demo/check_access.sh

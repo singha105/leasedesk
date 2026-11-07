@@ -218,7 +218,7 @@ class Keymaster(SwitchAgent):
         actor = ctx.msg.sender
         too_large = await self.size_problem(lease, lease.iam_user)
         if too_large is not None:
-            text = fmt.policy_too_large(lease.id, too_large.total, too_large.limit)
+            text = fmt.policy_too_large(lease.id, S.FAILED, too_large.total, too_large.limit)
             await self._fail(lease, "inline policy size cap", text, actor)
             return
         now = self.clock()
@@ -251,7 +251,7 @@ class Keymaster(SwitchAgent):
         )
         self.log.info("lease_active", lease=lease.id, user=lease.iam_user, expires=expires)
         if ctx.room_id != active.room_id:
-            await self.reply(ctx, f"{lease.id} · approval counted; the lease is now ACTIVE.")
+            await self.reply(ctx, fmt.head(lease.id, active.state, "approval counted; now active."))
         await self.notify(
             active,
             fmt.receipt(
@@ -280,7 +280,9 @@ class Keymaster(SwitchAgent):
             self.store.record_event(lease.id, "extension", f"apply failed: {exc}")
             await self.notify(
                 lease,
-                fmt.alert(lease.id, f"extension failed ({exc}); the lease ends as before"),
+                fmt.alert(
+                    lease.id, lease.state, f"extension failed ({exc}); the lease ends as before"
+                ),
             )
             return
         updated = self.store.update(
@@ -294,7 +296,8 @@ class Keymaster(SwitchAgent):
         )
         await self.notify(
             updated,
-            f"{lease.id} · extended by {minutes} min\n"
+            fmt.head(lease.id, S.ACTIVE, f"extended by {minutes} min")
+            + "\n"
             + fmt.receipt(
                 lease_id=lease.id,
                 expires_at=new_expiry,
@@ -317,7 +320,8 @@ class Keymaster(SwitchAgent):
             except ExecutorError as exc:
                 self.log.error("revoke_failed", lease=lease.id, error=str(exc))
                 await self.notify(
-                    lease, fmt.alert(lease.id, f"couldn't remove the policy ({exc}); still ACTIVE")
+                    lease,
+                    fmt.alert(lease.id, lease.state, f"couldn't remove the policy ({exc})"),
                 )
                 return False
         done = self.store.transition(lease.id, [S.ACTIVE], S.REVOKED, reason, actor=actor)
@@ -354,11 +358,21 @@ class Keymaster(SwitchAgent):
             score=lease.score or 0,
             skeptic_note=False,
             who_may=who_may_approve(lease, policy, self.known_agent_ids),
+            state=lease.state,
             extension=bool(extension_minutes),
+            drafted=self.drafted_for(lease),
         )
 
+    def drafted_for(self, lease: Lease) -> str | None:
+        """Who scribe drafted the lease for, when the person who confirmed is someone else."""
+        names = [lease.requester_name or ""]
+        names += [
+            p.name for p in self.participants.get(lease.room_id, []) if p.id == lease.requester
+        ]
+        return fmt.drafted_for(lease.proposal.requester_hint, *names)
+
     def status_line(self, lease: Lease) -> str:
-        parts = [f"{lease.id} · {lease.state}"]
+        parts = [f"{lease.id}", lease.state]
         if lease.requester_name:
             parts.append(f"for {lease.requester_name}")
         if lease.state is S.ACTIVE and lease.expires_at:

@@ -1,4 +1,5 @@
-"""Reading person-written library documents (access-policy, resource-catalog).
+"""Reading person-written library documents (access-policy, resource-catalog), attached to a
+room directly or inside a package (leasedesk-governance).
 
 Only documents with ``created_by_agent_id`` null count, so no agent (including a
 prompt-injected one) can write a document that keymaster or sentinel enforces.
@@ -29,7 +30,7 @@ def person_document_fetcher(
         try:
             for session in ready:
                 refs = await a.ops.list_references(connection_id=session.connection_id)
-                for d in refs.documents:
+                for d in refs.all_documents():
                     if d.name == name and d.created_by_agent_id is None:
                         found.setdefault(d.id, session.connection_id)
             if not found:

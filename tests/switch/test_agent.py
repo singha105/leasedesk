@@ -99,6 +99,10 @@ def make_agent(settings: Settings, creds: AgentCredentials) -> tuple[SwitchAgent
         ("approve LS-0007 @keymaster", "approve", "LS-0007"),
         ("@keymaster: submit\n```lease\n{}\n```", "submit", "```lease\n{}\n```"),
         ("no mention status", "no", "mention status"),
+        # A targeted message reads back with "@name " prefixed by Switch; an agent that also
+        # wrote the mention (scribe's "@sentinel check") arrives with it twice.
+        ("@keymaster @keymaster submit\n```lease\n{}\n```", "submit", "```lease\n{}\n```"),
+        ("@keymaster  @KeyMaster: status", "status", ""),
     ],
 )
 def test_parse_command(body: str, word: str, args: str) -> None:

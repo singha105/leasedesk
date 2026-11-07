@@ -41,6 +41,8 @@ log = get_logger(__name__)
 DEDUPE_SIZE = 2000
 READY_TIMEOUT_S = 10.0
 ROLE_RETRY_S = 60.0
+# LeaseDesk's own deterministic agents: they read every message, so nobody addresses them back.
+DESK_AGENTS = frozenset({"keymaster", "sentinel"})
 ROLE_MAX_TRIES = 10_000  # about a week of minutes; a room without roles is fine
 FINAL_FOR_AGENT = frozenset({ExitReason.TAKEN_OVER, ExitReason.AUTH_FAILED})
 
@@ -66,9 +68,14 @@ def parse_command(body: str, name: str) -> tuple[str, str]:
     With no mention (or nothing after it) the first word of the body is the command.
     """
     text = body.strip()
-    m = re.search(rf"@{re.escape(name)}\b[{re.escape(_TRIM)}]?", text, re.IGNORECASE)
+    mention = rf"@{re.escape(name)}\b[{re.escape(_TRIM)}]?"
+    m = re.search(mention, text, re.IGNORECASE)
     if m is not None:
-        text = text[m.end() :].strip() or text[: m.start()].strip()
+        after = text[m.end() :].strip()
+        # Switch prefixes "@name " to a targeted message, so it can arrive twice.
+        while (again := re.match(mention, after, re.IGNORECASE)) is not None:
+            after = after[again.end() :].strip()
+        text = after or text[: m.start()].strip()
     parts = text.split(None, 1)
     if not parts:
         return "", ""
@@ -134,16 +141,23 @@ class SwitchAgent:
             sender_name is not None and sender_name in self.agent_names
         )
 
+    async def refresh_agents(self, room_id: str) -> None:
+        """Re-read the room's participants and remember which are agents. An invitation sends
+        no frame, so an agent added after this one connected is unknown until this runs."""
+        session = self.sessions.get(room_id)
+        if session is None:
+            return
+        try:
+            people = await self.ops.list_participants(connection_id=session.connection_id)
+        except SwitchError as exc:
+            self.log.warning("list_participants_failed", room=room_id, detail=exc.detail)
+            return
+        self.participants[room_id] = people
+        self.agent_names |= {p.name for p in people if p.type == "agent"}
+
     async def learn_room(self, room_id: str) -> None:
         """Refresh participants (agent names) and learn agent sender ids from history."""
-        session = self.sessions.get(room_id)
-        if session is not None:
-            try:
-                people = await self.ops.list_participants(connection_id=session.connection_id)
-                self.participants[room_id] = people
-                self.agent_names |= {p.name for p in people if p.type == "agent"}
-            except SwitchError as exc:
-                self.log.warning("list_participants_failed", room=room_id, detail=exc.detail)
+        await self.refresh_agents(room_id)
         try:
             threads = await self.ops.read_context(room_id, limit=100)
         except SwitchError as exc:
@@ -230,8 +244,31 @@ class SwitchAgent:
                 ids.append(await self.ops.post_direct(room_id, chunk))
         return ids
 
+    def asking_agent(self, ctx: CommandContext) -> str | None:
+        """The asker's name when it is an agent that wakes only when a message addresses it
+        (scribe, skeptic). None for people, and for keymaster and sentinel, which read every
+        message in their rooms and must never be addressed back (they would answer each other).
+        """
+        msg = ctx.msg
+        name = msg.sender_name
+        if not name or name == self.name or name in DESK_AGENTS:
+            return None
+        if msg.sender in {self.own_id, self.settings.keymaster_id, self.settings.sentinel_id}:
+            return None
+        return name if self.is_agent(msg.sender, name) else None
+
     async def reply(self, ctx: CommandContext, text: str) -> list[str]:
-        return await self.post(ctx.room_id, text, thread_id=ctx.thread_root)
+        """People read the thread. An asking agent gets the answer by name in the same thread;
+        over the platform limit the first parts are plain posts, so it wakes once, at the end."""
+        name = self.asking_agent(ctx)
+        if name is None:
+            return await self.post(ctx.room_id, text, thread_id=ctx.thread_root)
+        *first, last = split_for_platform(text)
+        ids: list[str] = []
+        for chunk in first:
+            ids += await self.post(ctx.room_id, chunk, thread_id=ctx.thread_root)
+        await self.deliver(ctx.room_id, last, names=[name], thread_id=ctx.thread_root)
+        return ids
 
     async def targeted(
         self,

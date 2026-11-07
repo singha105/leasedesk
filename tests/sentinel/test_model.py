@@ -39,4 +39,6 @@ def test_catalog_template_parses() -> None:
 
     text = Path("switch/docs/resource-catalog.md").read_text()
     catalog = parse_catalog_text(text)
-    assert [j.arn for j in catalog.crown_jewels()] == ["arn:aws:s3:::leasedesk-demo-prod-secrets-*"]
+    assert [j.arn for j in catalog.crown_jewels()] == [
+        "arn:aws:s3:::leasedesk-demo-prod-secrets-mock"
+    ]

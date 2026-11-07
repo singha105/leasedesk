@@ -34,6 +34,9 @@ DESCRIPTIONS = {
     "keymaster": "LeaseDesk keymaster: the only agent that writes time-boxed IAM policies",
     "sentinel": "LeaseDesk sentinel: deterministic and AWS checks on every lease proposal",
 }
+# What people read beside the machine name (Part 4, Ruling 8). Sent at registration; for an
+# agent that already exists the owner sets it through the Gateway.
+DISPLAY_NAMES = {"keymaster": "Keymaster", "sentinel": "Sentinel"}
 
 
 class RegisterError(Exception):
@@ -113,6 +116,7 @@ async def register_agent(
         body: dict[str, object] = {
             "name": name,
             "description": DESCRIPTIONS.get(name, f"LeaseDesk {name}"),
+            "display_name": DISPLAY_NAMES.get(name),
             "connector_type": "leasedesk-python",
             "integration_profile": {
                 "connection_model": "always_on",
@@ -147,6 +151,8 @@ async def register_agent(
     if admin is not None:
         await admin.set_addressing(creds.id, "anyone")
         addressing = "anyone"
+        if name in DISPLAY_NAMES:
+            await admin.set_display_name(creds.id, DISPLAY_NAMES[name])
 
     sender = await _find_sender_id(base, creds)
     if sender:

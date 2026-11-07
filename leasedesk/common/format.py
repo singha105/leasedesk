@@ -138,17 +138,43 @@ def _lines(*parts: str | None) -> str:
 
 
 # Lease messages -----------------------------------------------------------------------------
+# Every one starts "LS-n · STATE · " (Part 4, Ruling 9), so a reader sees where a lease stands
+# from the first line, and sentinel's request header has a fixed shape.
+
+
+def head(lease_id: str, state: str, text: str) -> str:
+    return f"{lease_id} · {state} · {text}"
 
 
 def submitted(lease_id: str, by: str, requester_hint: str, p: LeaseProposal, tz: str) -> str:
     who = echo(requester_hint) or "the requester"
     return _lines(
-        f"{lease_id} · submitted by {by} for {who}",
+        head(lease_id, "AWAITING_CONFIRM", f"submitted by {by} for {who}"),
         f"Summary: {echo(p.summary)}",
         f"What: {describe_access(p.statements)}",
         f"How long: {p.duration_minutes} min, starting when approved",
         confirm_needed(lease_id, who),
     )
+
+
+def _name_words(text: str) -> list[str]:
+    return re.sub(r"[^a-z0-9]+", " ", text.casefold()).split()
+
+
+def drafted_for(hint: str, *names: str) -> str | None:
+    """The draft's ``requester_hint`` when it names someone other than the confirmer.
+
+    ``names`` are what the confirmer goes by (access-policy name, chat display name). A hint
+    matches a name when the words are equal or the first words are ("Arnab Singh" / "Arnab").
+    """
+    want = _name_words(hint)
+    if not want:
+        return None
+    for name in names:
+        have = _name_words(name)
+        if have and (have == want or have[0] == want[0]):
+            return None
+    return echo(hint)
 
 
 def confirm_needed(lease_id: str, who: str) -> str:
@@ -160,7 +186,7 @@ def confirm_needed(lease_id: str, who: str) -> str:
 
 def review_request(lease_id: str, requester: str, block_json: str) -> str:
     return _lines(
-        f"{lease_id} · confirmed by {requester}, under review",
+        head(lease_id, "UNDER_REVIEW", f"confirmed by {requester}"),
         "```review",
         block_json,
         "```",
@@ -168,9 +194,11 @@ def review_request(lease_id: str, requester: str, block_json: str) -> str:
 
 
 def dev_fake_verdict(lease_id: str, risk: str) -> str:
-    return (
-        f"{lease_id} · DEV ONLY: keymaster invented a {risk} verdict "
-        "(LEASEDESK_DEV_FAKE_VERDICT). Never use this outside a demo."
+    return head(
+        lease_id,
+        "UNDER_REVIEW",
+        f"DEV ONLY: keymaster invented a {risk} verdict "
+        "(LEASEDESK_DEV_FAKE_VERDICT). Never use this outside a demo.",
     )
 
 
@@ -188,13 +216,16 @@ def approval_request(
     score: int,
     skeptic_note: bool,
     who_may: str,
+    state: str,
     extension: bool = False,
+    drafted: str | None = None,
 ) -> str:
     note = " · see skeptic's note above" if skeptic_note else ""
     how_long = f"+{minutes} min extension" if extension else f"{minutes} min"
+    for_whom = f" (drafted for {drafted})" if drafted else ""
     return _lines(
-        f"{lease_id} · needs approval",
-        f"Who: {requester} -> IAM user {iam_user}",
+        head(lease_id, state, "needs approval"),
+        f"Who: {requester} -> IAM user {iam_user}{for_whom}",
         f"What: {describe_access(statements)}",
         f"How long: {how_long}, until {fmt_time(expires_at, tz)}",
         f"Risk: {risk} ({risk_source}, score {score}){note}",
@@ -203,8 +234,8 @@ def approval_request(
     )
 
 
-def approval_counted(lease_id: str, by: str, have: int, need: int) -> str:
-    return f"{lease_id} · approval from {by} counted ({have} of {need})."
+def approval_counted(lease_id: str, state: str, by: str, have: int, need: int) -> str:
+    return head(lease_id, state, f"approval from {by} counted ({have} of {need}).")
 
 
 def receipt(
@@ -218,7 +249,7 @@ def receipt(
     tz: str,
 ) -> str:
     return _lines(
-        f"{lease_id} · ACTIVE until {fmt_time(expires_at, tz)}",
+        head(lease_id, "ACTIVE", f"until {fmt_time(expires_at, tz)}"),
         f"Approved by {approved_by} at {fmt_clock(approved_at, tz)}. "
         f"Policy {policy_name} on {iam_user}.",
         f"AWS enforces the expiry itself. Revoke early: @keymaster revoke {lease_id}",
@@ -227,11 +258,13 @@ def receipt(
 
 def expiry(lease_id: str, at: datetime, tz: str) -> str:
     when = f"{fmt_clock(at, tz)} {tz_abbr(at, tz)}"
-    return f"{lease_id} · EXPIRED at {when}. Policy removed, ledger updated."
+    return head(lease_id, "EXPIRED", f"at {when}. Policy removed, ledger updated.")
 
 
-def refusal(lease_id: str, reason: str, who_may: str) -> str:
-    return _lines(f"{lease_id} · approval not counted", f"{reason} Who may approve: {who_may}.")
+def refusal(lease_id: str, state: str, reason: str, who_may: str) -> str:
+    return _lines(
+        head(lease_id, state, "approval not counted"), f"{reason} Who may approve: {who_may}."
+    )
 
 
 def blocked(lease_id: str, findings: list[Finding]) -> str:
@@ -241,7 +274,7 @@ def blocked(lease_id: str, findings: list[Finding]) -> str:
     ]
     more = f"- and {len(findings) - 6} more" if len(findings) > 6 else None
     return _lines(
-        f"{lease_id} · BLOCKED by review. Nothing was granted.",
+        head(lease_id, "BLOCKED", "by review. Nothing was granted."),
         *shown,
         more,
         "Ask for a narrower lease and submit it again.",
@@ -250,37 +283,40 @@ def blocked(lease_id: str, findings: list[Finding]) -> str:
 
 def escalated(lease_id: str, approvals: int, group: str, room: str) -> str:
     return _lines(
-        f"{lease_id} · HIGH risk, escalated to {room}",
+        head(lease_id, "ESCALATED", f"HIGH risk, escalated to {room}"),
         f"It needs {approvals} approval(s) from group {group}, given in {room}.",
     )
 
 
 def denied(lease_id: str, by: str, reason: str) -> str:
-    return f"{lease_id} · DENIED by {by}: {reason[:300]}. Nothing was granted."
+    return head(lease_id, "DENIED", f"by {by}: {reason[:300]}. Nothing was granted.")
 
 
 def revoked(lease_id: str, by: str, at: datetime, tz: str) -> str:
-    return (
-        f"{lease_id} · REVOKED by {by} at {fmt_clock(at, tz)} {tz_abbr(at, tz)}. "
-        "Policy removed, ledger updated."
+    return head(
+        lease_id,
+        "REVOKED",
+        f"by {by} at {fmt_clock(at, tz)} {tz_abbr(at, tz)}. Policy removed, ledger updated.",
     )
 
 
 def cancelled(lease_id: str, reason: str) -> str:
-    return f"{lease_id} · CANCELLED: {reason}. Nothing was granted."
+    return head(lease_id, "CANCELLED", f"{reason}. Nothing was granted.")
 
 
 def failed(lease_id: str, why: str) -> str:
-    return f"{lease_id} · FAILED: {why[:300]}. Nothing is active for this lease."
+    return head(lease_id, "FAILED", f"{why[:300]}. Nothing is active for this lease.")
 
 
-def alert(lease_id: str, what: str) -> str:
-    return f"ALERT {lease_id} · {what[:300]}"
+def alert(lease_id: str, state: str, what: str) -> str:
+    return head(lease_id, state, f"ALERT: {what[:300]}")
 
 
 def reminder(lease_id: str) -> str:
-    return (
-        f"{lease_id} · still waiting for a review verdict. Nothing moves forward until one arrives."
+    return head(
+        lease_id,
+        "UNDER_REVIEW",
+        "still waiting for a review verdict. Nothing moves forward until one arrives.",
     )
 
 
@@ -324,10 +360,14 @@ def policy_warning(error: str, last_hash: str | None) -> str:
     return f"access-policy couldn't be read: {error[:300]}. {keep}"
 
 
-def policy_too_large(lease_id: str, total: int, limit: int) -> str:
+def policy_too_large(lease_id: str, state: str, total: int, limit: int) -> str:
     return _lines(
-        f"{lease_id} · can't be granted: the IAM policy would make {total} characters of "
-        f"inline policy on this user, over AWS's {limit}-character limit.",
+        head(
+            lease_id,
+            state,
+            f"can't be granted: the IAM policy would make {total} characters of "
+            f"inline policy on this user, over AWS's {limit}-character limit.",
+        ),
         "Ask for fewer statements or shorter resource lists.",
     )
 

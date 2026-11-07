@@ -64,7 +64,12 @@ def _sender_name(km: Keymaster, ctx: CommandContext) -> str:
     return named or ctx.msg.sender_name or "someone"
 
 
-def _is_agent(km: Keymaster, ctx: CommandContext) -> bool:
+async def _is_agent(km: Keymaster, ctx: CommandContext) -> bool:
+    """Whether the sender is an agent. A sender keymaster can't place yet may be an agent
+    invited after it connected (no frame announces that), so the room is re-read first."""
+    if km.is_agent(ctx.msg.sender, ctx.msg.sender_name):
+        return True
+    await km.refresh_agents(ctx.room_id)
     return km.is_agent(ctx.msg.sender, ctx.msg.sender_name)
 
 
@@ -134,9 +139,9 @@ async def confirm(km: Keymaster, ctx: CommandContext) -> None:
     async with km.lock(lease.id):
         lease = km.store.require(lease.id)
         if lease.state is not S.AWAITING_CONFIRM:
-            await km.reply(ctx, f"{lease.id} is {lease.state}; there's nothing to confirm.")
+            await km.reply(ctx, fmt.head(lease.id, lease.state, "nothing to confirm."))
             return
-        if _is_agent(km, ctx):
+        if await _is_agent(km, ctx):
             await km.reply(ctx, "Only the person who needs the access can confirm a lease.")
             return
         iam_user = policy.principals.get(ctx.msg.sender)
@@ -158,7 +163,8 @@ async def confirm(km: Keymaster, ctx: CommandContext) -> None:
                 actor=ctx.msg.sender,
             )
             await km.reply(
-                ctx, fmt.policy_too_large(lease.id, size_problem.total, size_problem.limit)
+                ctx,
+                fmt.policy_too_large(lease.id, S.CANCELLED, size_problem.total, size_problem.limit),
             )
             await km.ledger_record(done)
             return
@@ -223,7 +229,7 @@ async def verdict(km: Keymaster, ctx: CommandContext) -> None:
                 ctx, "Verdict ignored: LEASEDESK_SENTINEL_ID isn't set, so no verdict counts."
             )
             return
-        if not _is_agent(km, ctx):
+        if not await _is_agent(km, ctx):
             await km.reply(ctx, "Verdict ignored: verdicts come from the review agent.")
             return
     try:
@@ -315,10 +321,10 @@ async def approve(km: Keymaster, ctx: CommandContext) -> None:
         lease = km.store.require(lease.id)
         extending = lease.state is S.ACTIVE and lease.pending_extension_minutes is not None
         if lease.state not in (S.AWAITING_APPROVAL, S.ESCALATED) and not extending:
-            await km.reply(ctx, f"{lease.id} is {lease.state}; there's nothing to approve.")
+            await km.reply(ctx, fmt.head(lease.id, lease.state, "nothing to approve."))
             return
         agents = set(km.known_agent_ids)
-        if _is_agent(km, ctx):
+        if await _is_agent(km, ctx):
             agents.add(ctx.msg.sender)
         check = can_approve(
             lease,
@@ -330,7 +336,7 @@ async def approve(km: Keymaster, ctx: CommandContext) -> None:
         )
         who_may = who_may_approve(lease, policy, km.known_agent_ids)
         if not check.ok:
-            await km.reply(ctx, fmt.refusal(lease.id, check.reason, who_may))
+            await km.reply(ctx, fmt.refusal(lease.id, lease.state, check.reason, who_may))
             return
         started = lease.approval_requested_at or lease.created_at
         if km.clock() >= started + timedelta(minutes=policy.approval_timeout_minutes):
@@ -338,6 +344,7 @@ async def approve(km: Keymaster, ctx: CommandContext) -> None:
                 ctx,
                 fmt.refusal(
                     lease.id,
+                    lease.state,
                     f"The approval window ({policy.approval_timeout_minutes} min) has closed.",
                     "nobody now; submit it again",
                 ),
@@ -355,14 +362,17 @@ async def approve(km: Keymaster, ctx: CommandContext) -> None:
             message_id=ctx.msg.message_id,
         )
         if not added:
-            await km.reply(ctx, f"{lease.id} · {name}'s approval is already counted.")
+            await km.reply(
+                ctx, fmt.head(lease.id, lease.state, f"{name}'s approval is already counted.")
+            )
             return
         approvals = km.store.approvals(lease.id, lease.round)
         if not approval_satisfied(lease, approvals, policy):
             need = required_approvals(lease.risk, policy)
             have = len({a.approver_id for a in approvals if a.decision == "approve"})
             await km.reply(
-                ctx, fmt.approval_counted(lease.id, name, have, need.count if need else 1)
+                ctx,
+                fmt.approval_counted(lease.id, lease.state, name, have, need.count if need else 1),
             )
             return
         names = ", ".join(sorted({a.approver_name for a in approvals if a.decision == "approve"}))
@@ -382,18 +392,24 @@ async def deny(km: Keymaster, ctx: CommandContext) -> None:
         await km.reply(ctx, f"Please give a reason: @keymaster deny {lease.id} <reason>")
         return
     approver = policy.approver(ctx.msg.sender)
-    if approver is None or _is_agent(km, ctx):
-        await km.reply(ctx, f"{lease.id} · deny not counted: only listed approvers can deny.")
+    if approver is None or await _is_agent(km, ctx):
+        await km.reply(
+            ctx,
+            fmt.head(lease.id, lease.state, "deny not counted: only listed approvers can deny."),
+        )
         return
     async with km.lock(lease.id):
         lease = km.store.require(lease.id)
         if lease.state is S.ACTIVE and lease.pending_extension_minutes:
             km.store.update(lease.id, pending_extension_minutes=None)
             km.store.record_event(lease.id, "extension", f"denied by {approver.name}: {reason}")
-            await km.reply(ctx, f"{lease.id} · extension denied by {approver.name}: {reason}")
+            await km.reply(
+                ctx,
+                fmt.head(lease.id, lease.state, f"extension denied by {approver.name}: {reason}"),
+            )
             return
         if lease.state not in (S.AWAITING_APPROVAL, S.ESCALATED, S.UNDER_REVIEW):
-            await km.reply(ctx, f"{lease.id} is {lease.state}; there's nothing to deny.")
+            await km.reply(ctx, fmt.head(lease.id, lease.state, "nothing to deny."))
             return
         km.store.add_approval(
             lease.id,
@@ -426,12 +442,15 @@ async def revoke(km: Keymaster, ctx: CommandContext) -> None:
     if lease is None or policy is None:
         return
     sender = ctx.msg.sender
-    allowed = not _is_agent(km, ctx) and (
+    allowed = not await _is_agent(km, ctx) and (
         sender == lease.requester or policy.approver(sender) is not None
     )
     if not allowed:
         await km.reply(
-            ctx, f"{lease.id} · only the requester, an approver or security can revoke it."
+            ctx,
+            fmt.head(
+                lease.id, lease.state, "only the requester, an approver or security can revoke it."
+            ),
         )
         return
     name = _sender_name(km, ctx)
@@ -446,7 +465,7 @@ async def revoke(km: Keymaster, ctx: CommandContext) -> None:
             await km.notify(done, fmt.cancelled(done.id, f"withdrawn by {name}"))
             await km.ledger_record(done)
         else:
-            await km.reply(ctx, f"{lease.id} is already {lease.state}; nothing to revoke.")
+            await km.reply(ctx, fmt.head(lease.id, lease.state, "already over; nothing to revoke."))
 
 
 async def extend(km: Keymaster, ctx: CommandContext) -> None:
@@ -462,19 +481,25 @@ async def extend(km: Keymaster, ctx: CommandContext) -> None:
     async with km.lock(lease.id):
         lease = km.store.require(lease.id)
         if ctx.msg.sender != lease.requester:
-            await km.reply(ctx, f"{lease.id} · only the requester can ask to extend it.")
+            await km.reply(
+                ctx, fmt.head(lease.id, lease.state, "only the requester can ask to extend it.")
+            )
             return
         if lease.state is not S.ACTIVE or lease.starts_at is None or lease.expires_at is None:
             await km.reply(
-                ctx, f"{lease.id} is {lease.state}; only an ACTIVE lease can be extended."
+                ctx, fmt.head(lease.id, lease.state, "only an ACTIVE lease can be extended.")
             )
             return
         total = int((lease.expires_at - lease.starts_at).total_seconds() // 60) + minutes
         if total > policy.max_duration_minutes:
             await km.reply(
                 ctx,
-                f"{lease.id} · can't extend: {total} min in total would pass the "
-                f"{policy.max_duration_minutes}-minute maximum.",
+                fmt.head(
+                    lease.id,
+                    lease.state,
+                    f"can't extend: {total} min in total would pass the "
+                    f"{policy.max_duration_minutes}-minute maximum.",
+                ),
             )
             return
         lease = km.store.update(
@@ -523,7 +548,7 @@ async def whoami(km: Keymaster, ctx: CommandContext) -> None:
 
 async def _security_only(km: Keymaster, ctx: CommandContext, what: str) -> str | None:
     policy = km.policy
-    if policy is None or _is_agent(km, ctx) or not _in_security(policy, ctx.msg.sender):
+    if policy is None or await _is_agent(km, ctx) or not _in_security(policy, ctx.msg.sender):
         await km.reply(ctx, f"Only the {SECURITY_GROUP} group can {what}.")
         return None
     return _sender_name(km, ctx)

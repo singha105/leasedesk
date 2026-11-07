@@ -56,7 +56,10 @@ class Scheduler:
             except ExecutorError as exc:
                 log.error("expiry_revoke_failed", lease=lease.id, error=str(exc))
                 await self.notifier.notify(
-                    lease, fmt.alert(lease.id, f"couldn't remove the policy at expiry ({exc})")
+                    lease,
+                    fmt.alert(
+                        lease.id, lease.state, f"couldn't remove the policy at expiry ({exc})"
+                    ),
                 )
                 return False
         try:
@@ -99,7 +102,10 @@ class Scheduler:
                     self.store.update(fresh.id, pending_extension_minutes=None)
                     self.store.record_event(fresh.id, "extension", "extension request timed out")
                     await self.notifier.notify(
-                        fresh, f"{fresh.id} · extension request timed out; the lease is unchanged."
+                        fresh,
+                        fmt.head(
+                            fresh.id, fresh.state, "extension request timed out; lease unchanged."
+                        ),
                     )
         pol = self.policy()
         if pol is not None:

@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from structlog.testing import capture_logs
 
 from leasedesk.common.render import policy_name
 from leasedesk.keymaster.store import LeaseState
+from leasedesk.switch.models import Participant
 
+from ..common.conftest import proposal_dict
 from .conftest import ARNAB, EVE, PRIYA, SAM, SCRIBE, SENTINEL, Clock
 from .harness import DESK, SEC, Harness
 
@@ -48,7 +51,7 @@ async def test_full_low_flow(h: Harness) -> None:
     lease = h.lease(lease_id)
     assert lease.state is S.ACTIVE
     assert h.executor.policies[USER][policy_name(lease_id)] == lease.final_policy_json
-    assert h.km.last().startswith(f"{lease_id} · ACTIVE until")
+    assert h.km.last().startswith(f"{lease_id} · ACTIVE · until")
     assert all(thread == "sw_in_1" for room, thread, _ in h.km.sent if room == DESK)
     h.clock.advance(minutes=3)
     await h.km.scheduler.tick()
@@ -79,7 +82,7 @@ async def test_requester_cannot_approve_own(tmp_path: Path, clock: Clock) -> Non
     lease_id = await to_approval(h)
     await h.say(ARNAB, f"@keymaster approve {lease_id}")
     assert h.km.last() == (
-        f"{lease_id} · approval not counted\n"
+        f"{lease_id} · AWAITING_APPROVAL · approval not counted\n"
         "Arnab requested this lease, so Arnab can't approve it. Who may approve: Priya."
     )
     assert h.state(lease_id) is S.AWAITING_APPROVAL
@@ -106,7 +109,9 @@ async def test_agent_approval_never_counts(tmp_path: Path, clock: Clock) -> None
 async def test_unlisted_person_refused_politely(h: Harness) -> None:
     lease_id = await to_approval(h)
     await h.say(EVE, f"@keymaster approve {lease_id}", name="eve.")
-    assert h.km.last().startswith(f"{lease_id} · approval not counted\neve. isn't in the approvers")
+    assert h.km.last().startswith(
+        f"{lease_id} · AWAITING_APPROVAL · approval not counted\neve. isn't in the approvers"
+    )
     assert h.state(lease_id) is S.AWAITING_APPROVAL
 
 
@@ -204,10 +209,10 @@ async def test_revoke_idempotent(h: Harness) -> None:
     await h.say(ARNAB, f"@keymaster revoke {lease_id}")
     assert h.state(lease_id) is S.REVOKED
     assert h.executor.policies[USER] == {}
-    assert "REVOKED by Arnab" in h.km.last()
+    assert "REVOKED · by Arnab" in h.km.last()
     await h.say(ARNAB, f"@keymaster revoke {lease_id}")
     assert h.state(lease_id) is S.REVOKED
-    assert "already REVOKED" in h.km.last()
+    assert "REVOKED · already over; nothing to revoke." in h.km.last()
 
 
 async def test_stranger_cannot_revoke(h: Harness) -> None:
@@ -223,7 +228,7 @@ async def test_deny(h: Harness) -> None:
     assert "reason" in h.km.last() and h.state(lease_id) is S.AWAITING_APPROVAL
     await h.say(PRIYA, f"@keymaster deny {lease_id} too broad for a debug task")
     assert h.state(lease_id) is S.DENIED
-    assert "DENIED by Priya: too broad for a debug task" in h.km.last()
+    assert "DENIED · by Priya: too broad for a debug task" in h.km.last()
 
 
 async def test_block_verdict(h: Harness) -> None:
@@ -266,11 +271,13 @@ async def test_freeze_revokes_all_and_blocks_submit(h: Harness) -> None:
 
 async def test_malformed_lease_json_helpful(h: Harness) -> None:
     await h.say(
-        SCRIBE, '@keymaster submit\n```lease\n{\n  "kind": "lease_proposal"\n  "x": 1\n}\n```'
+        SCRIBE,
+        '@keymaster submit\n```lease\n{\n  "kind": "lease_proposal"\n  "x": 1\n}\n```',
+        name="scribe",
     )
     assert h.store.recent() == []
     msg = h.km.last()
-    assert msg.startswith("That lease wasn't accepted:") and "line 3" in msg
+    assert msg.startswith("@scribe That lease wasn't accepted:") and "line 3" in msg
 
 
 async def test_schema_errors_listed(h: Harness) -> None:
@@ -541,3 +548,69 @@ async def test_review_request_delivery_falls_back(
     thread, text = review[0]
     assert text.startswith(starts) and thread == h.lease(lease_id).thread_id
     assert h.state(lease_id) is S.UNDER_REVIEW
+
+
+# Answers to agents ---------------------------------------------------------------------------
+# scribe's session wakes only when a message addresses it (live scenario 1: a refused submit
+# sat in the thread and scribe never fixed it), so keymaster answers an agent by name, in the
+# same thread. sentinel and keymaster read every message, so they are never addressed.
+
+
+async def test_refused_agent_submit_goes_back_to_it_by_name(h: Harness) -> None:
+    await h.say(
+        SCRIBE,
+        "@keymaster submit\n```lease\n" + json.dumps(proposal_dict(duration_minutes=1)) + "\n```",
+        name="scribe",
+        thread_id="sw_person",
+    )
+    room, thread, text = h.km.sent[-1]
+    assert (room, thread) == (DESK, "sw_person")
+    assert text.startswith("@scribe ") and "wasn't accepted" in text
+
+
+async def test_accepted_agent_submit_tells_it_the_lease_id(h: Harness) -> None:
+    lease_id = await h.submit()
+    assert lease_id
+    assert h.km.last().startswith(f"@scribe {lease_id} · AWAITING_CONFIRM · ")
+
+
+async def test_a_person_still_gets_a_thread_post(h: Harness) -> None:
+    await h.say(ARNAB, "@keymaster whoami", name="arnab.")
+    assert not h.km.last().startswith("@")
+
+
+async def test_sentinel_is_never_addressed_back(h: Harness) -> None:
+    lease_id = await h.submit()
+    await h.say(ARNAB, f"@keymaster confirm {lease_id}", name="arnab.")
+    before = len(h.km.sent)
+    await h.verdict(lease_id, "LOW")
+    assert h.state(lease_id) is S.AWAITING_APPROVAL
+    assert not [t for t in h.km.texts()[before:] if t.startswith("@sentinel")]
+
+
+async def test_agent_invited_after_keymaster_connected_is_still_an_agent(
+    tmp_path: Path, clock: Clock
+) -> None:
+    """An invitation sends no frame, so keymaster only knew the agents present when it
+    connected. One added later (and listed as an approver by mistake) must still be refused
+    as an agent: keymaster re-reads the room's participants before it counts the approval."""
+    newcomer, newcomer_name = "@switch-agent-dddd0000:localhost", "intruder"
+    h = Harness(tmp_path, clock, solo_mode=True)
+    h.set_policy(
+        solo_mode=True,
+        approvers=[{"id": newcomer, "name": newcomer_name, "groups": ["security"]}],
+    )
+    await h.start()
+    lease_id = await to_approval(h)
+    h.km.sessions[DESK] = SimpleNamespace(connection_id="conn-desk")
+    calls: list[str] = []
+
+    async def participants(*, connection_id: str) -> list[Participant]:
+        calls.append(connection_id)
+        return [Participant(id="agent-uuid-dddd", name=newcomer_name, type="agent")]
+
+    h.km.ops.list_participants = participants  # type: ignore[method-assign]
+    await h.say(newcomer, f"@keymaster approve {lease_id}", name=newcomer_name)
+    assert calls == ["conn-desk"]
+    assert h.state(lease_id) is S.AWAITING_APPROVAL
+    assert "Approvals from agents are never counted." in h.km.last()

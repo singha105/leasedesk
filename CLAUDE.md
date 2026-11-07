@@ -16,14 +16,14 @@ Recorded server behaviour lives in [docs/PROTOCOL_NOTES.md](docs/PROTOCOL_NOTES.
 | `make lint` | `ruff check`, `ruff format --check`, `mypy leasedesk/` |
 | `make test` | `pytest` |
 | `make up` | mock demo: moto in the background, keymaster and sentinel under `scripts/demo/supervise.py` (restarts a crashed agent; Ctrl-C stops all) |
-| `make doctor` | check tools, env, server health and credential file modes |
+| `make doctor` | PASS/FAIL per check: file modes, Switch health, agent keys, providers, rooms, roles, the governance package and its documents, the stored template, AWS profiles; exit 1 on any FAIL |
 | `make register` | register keymaster and sentinel; keys go to `.secrets/agents/`, sender ids to `.env` |
 | `make moto` | mock AWS (moto server, IAM auth on); mock keys go to `.state/mock-aws.env` |
 | `make run-keymaster` | run keymaster alone (mock mode needs `make moto`) |
 | `make run-sentinel` | run sentinel alone (no AWS call in mock mode) |
 | `make review P=file.json` | offline sentinel review of a proposal (`python -m leasedesk.sentinel.cli review`) |
 | `make check-access` | demo helper: prints ALLOWED or DENIED for lease-demo-dev every 10 s |
-| `make e2e-mock` | end-to-end tests on moto (`pytest -m e2e`) |
+| `make e2e-mock` | end-to-end in one process: the real keymaster and sentinel on an in-process FakeSwitch and moto, scenarios 1, 2, 4, 5, 6 and no-skeptic (`tests/e2e`), under 60 s |
 
 sentinel is deterministic: rules (parliament, escalation paths, the access-policy and resource-catalog) plus AWS Access Analyzer in real mode, never a model. Scoring is documented in [docs/SCORING.md](docs/SCORING.md).
 

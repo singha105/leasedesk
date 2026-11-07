@@ -19,7 +19,7 @@ from leasedesk.sentinel.findings import RULES
 from leasedesk.sentinel.review import review
 from leasedesk.switch.agent import parse_command
 
-from ..keymaster.conftest import ARNAB, KEYMASTER, Clock, policy_dict
+from ..keymaster.conftest import ARNAB, KEYMASTER, SCRIBE, Clock, policy_dict
 from .conftest import BUCKET, make_ctx, raw, stmt
 from .harness import SentinelHarness
 
@@ -97,6 +97,41 @@ async def test_check_is_advisory_and_offers_a_corrected_lease(sh: SentinelHarnes
     lease = [b for b in extract_blocks(corrected) if b.kind == "lease"]
     assert len(lease) == 1 and LeaseProposal.model_validate(lease[0].data)
     assert "@keymaster" not in corrected
+
+
+def _lease(proposal: dict[str, Any]) -> str:
+    return f"@sentinel check\n```lease\n{json.dumps(proposal)}\n```"
+
+
+async def test_check_from_an_agent_goes_back_to_it_by_name(sh: SentinelHarness) -> None:
+    """scribe's session wakes only when a message addresses it. A plain thread post left it
+    waiting forever (live scenario 1), so its advisory is targeted at it, in the same thread."""
+    sh.sentinel.agent_names.add("scribe")
+    await sh.say(SCRIBE, _lease(raw(duration_minutes=60)), name="scribe")
+    assert sh.sentinel.paths == ["names"]
+    _, thread, text = sh.sentinel.sent[0]
+    assert thread == "sw_thread" and text.startswith("@scribe ")
+    assert advisory_of(text)["kind"] == "lease_advisory"
+
+
+async def test_check_from_an_agent_gets_the_corrected_lease_in_the_same_message(
+    sh: SentinelHarness,
+) -> None:
+    """Two addressed messages would wake scribe twice; it could submit before the fix lands.
+    Over Discord's limit, the first parts are plain thread posts and only the last addresses it."""
+    sh.sentinel.agent_names.add("scribe")
+    await sh.say(SCRIBE, _lease(raw(stmt("All", ["s3:*"], [BUCKET, f"{BUCKET}/*"]))), name="scribe")
+    assert sh.sentinel.paths.count("names") == 1 and sh.sentinel.paths[-1] == "names"
+    texts = sh.sentinel.texts()
+    assert {thread for _, thread, _ in sh.sentinel.sent} == {"sw_thread"}
+    assert advisory_of("\n".join(texts))["risk"] == "HIGH"
+    assert len([b for b in extract_blocks(texts[-1]) if b.kind == "lease"]) == 1
+
+
+async def test_check_from_a_person_stays_a_thread_post(sh: SentinelHarness) -> None:
+    sh.sentinel.agent_names.add("scribe")
+    await sh.check(raw(duration_minutes=60), ARNAB)
+    assert sh.sentinel.paths == ["post"]
 
 
 async def test_check_without_a_lease_block_says_how(sh: SentinelHarness) -> None:
@@ -208,6 +243,28 @@ async def test_review_block_echoed_inside_another_keymaster_message_gets_nothing
 async def test_header_must_name_the_same_lease_as_the_block(sh: SentinelHarness) -> None:
     text = sh.request_text("LS-0007").replace("LS-0007 · confirmed", "LS-0006 · confirmed", 1)
     await sh.say(KEYMASTER, text, name="keymaster")
+    assert sh.sentinel.sent == []
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "LS-0007 · UNDER_REVIEW · confirmed by Arnab",  # Part 4 (Ruling 9)
+        "LS-0007 · confirmed by Arnab, under review",  # before: requests still in flight
+    ],
+)
+async def test_review_header_old_and_new_forms_accepted(sh: SentinelHarness, header: str) -> None:
+    block = sh.request_text("LS-0007").split("\n", 1)[1]
+    await sh.say(KEYMASTER, f"@sentinel {header}\n{block}", name="keymaster")
+    assert len(sh.sentinel.sent) == 1
+    assert verdict_of(sh.sentinel.sent[0][2]).lease_id == "LS-0007"
+
+
+async def test_new_header_must_name_the_same_lease_as_the_block(sh: SentinelHarness) -> None:
+    block = sh.request_text("LS-0007").split("\n", 1)[1]
+    await sh.say(
+        KEYMASTER, f"LS-0006 · UNDER_REVIEW · confirmed by Arnab\n{block}", name="keymaster"
+    )
     assert sh.sentinel.sent == []
 
 

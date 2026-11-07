@@ -90,9 +90,7 @@ class Reconciler:
                 log.error("lease_policy_vanished", lease=lease.id, user=lease.iam_user)
                 await self.notifier.notify(
                     done,
-                    fmt.alert(
-                        done.id, f"policy {name} vanished from {lease.iam_user}; lease FAILED"
-                    ),
+                    fmt.alert(done.id, done.state, f"policy {name} vanished from {lease.iam_user}"),
                 )
                 await self.notifier.ledger(done)
         log.info(

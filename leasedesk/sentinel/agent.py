@@ -67,7 +67,7 @@ def _has_review(body: str) -> bool:
 # keymaster's review request opens with "LS-n · confirmed by …" on its own first line (Switch may
 # put "@sentinel " in front). keymaster echoes proposal text in other messages, so a review block
 # anywhere else in a keymaster message is data, not a request.
-_HEADER = re.compile(r"\s*(?:@\S+\s+)?(\S+) · confirmed by ")
+_HEADER = re.compile(r"\s*(?:@\S+\s+)?(\S+) · (?:[A-Z_]+ · )?confirmed by ")  # new and pre-Part 4
 
 
 def _headed(body: str, lease_id: str) -> bool:
@@ -296,8 +296,15 @@ class Sentinel(SwitchAgent):
         result = await self._review(block.data)
         review_id = self._advisory_id(result)
         self.store.save(review_id, result, lease_id=None, gating=False)
-        await self.reply(ctx, advisory_message(review_id, result, lease_id=None, why=ON_REQUEST))
-        await self._offer_corrected(ctx, review_id, result)
+        text = advisory_message(review_id, result, lease_id=None, why=ON_REQUEST)
+        corrected = corrected_message(review_id, result)
+        if corrected is not None and self.asking_agent(ctx):
+            # One message: each addressed message wakes the agent, and it might submit the
+            # original before the corrected lease arrives.
+            text, corrected = f"{text}\n\n{corrected}", None
+        await self.reply(ctx, text)
+        if corrected is not None:
+            await self.reply(ctx, corrected)
 
     async def _explain(self, ctx: CommandContext) -> None:
         token = ctx.args.split()[0].strip(".,;:!?") if ctx.args.split() else ""

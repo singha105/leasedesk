@@ -78,7 +78,7 @@ async def test_expiry_revokes_with_injected_clock(
     assert await sched.tick() == [lease.id]
     assert store.require(lease.id).state is S.EXPIRED
     assert ex.policies[USER] == {}
-    assert any("EXPIRED at" in t for t in note.texts())
+    assert any(" · EXPIRED · at " in t for t in note.texts())
     assert note.ledger_rows == [(lease.id, "EXPIRED")]
     assert await sched.tick() == []
 
@@ -195,7 +195,7 @@ async def test_vanished_policy_fails_lease(
     report = await Reconciler(store, ex, note, lambda: {USER}, clock).reconcile()
     assert report.failed == [lease.id]
     assert store.require(lease.id).state is S.FAILED
-    assert any(t.startswith("ALERT") for t in note.texts())
+    assert any(t.startswith(f"{lease.id} · FAILED · ALERT: ") for t in note.texts())
     assert note.ledger_rows == [(lease.id, "FAILED")]
 
 

@@ -12,7 +12,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -53,15 +53,64 @@ class Catalog(BaseModel):
         return canonical_hash(self.model_dump(mode="json"))[7:19]
 
 
+_COLUMNS = {
+    "arn": "arn",
+    "owner": "owner",
+    "sensitivity": "sensitivity",
+    "typical access": "note",
+    "sensitive actions": "sensitive_actions",
+}
+
+
+def _cells(line: str) -> list[str]:
+    return [c.strip().strip("`").strip() for c in line.strip().strip("|").split("|")]
+
+
+def _table(text: str) -> dict[str, Any] | None:
+    """The first pipe table whose header has ARN and Sensitivity, as catalog data."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if not line.lstrip().startswith("|"):
+            continue
+        header = [c.casefold() for c in _cells(line)]
+        if "arn" not in header or "sensitivity" not in header:
+            continue
+        separator = _cells(lines[i + 1]) if i + 1 < len(lines) else []
+        if len(separator) != len(header) or not all(
+            re.fullmatch(r":?-+:?", cell) for cell in separator
+        ):
+            raise CatalogError("resource-catalog table needs a valid separator row")
+        rows = []
+        for row_line in lines[i + 2 :]:
+            if not row_line.lstrip().startswith("|"):
+                break
+            row: dict[str, Any] = {}
+            cells = _cells(row_line)
+            if len(cells) != len(header):
+                raise CatalogError("resource-catalog table row has the wrong number of columns")
+            for name, cell in zip(header, cells, strict=True):
+                key = _COLUMNS.get(name)
+                if key == "sensitive_actions":
+                    row[key] = [a.strip() for a in cell.split(",") if a.strip()]
+                elif key is not None and cell:
+                    row[key] = cell
+            rows.append(row)
+        return {"version": 1, "resources": rows}
+    return None
+
+
 def parse_catalog_text(text: str) -> Catalog:
+    """A fenced YAML block wins (the Part 3 format); otherwise the Markdown table."""
     m = _FENCE.search(text)
-    body = m.group(1) if m else text
-    try:
-        data = yaml.safe_load(body)
-    except yaml.YAMLError:
-        raise CatalogError("bad YAML in resource-catalog") from None
+    data = None if m else _table(text)
+    if data is None:
+        body = m.group(1) if m else text
+        try:
+            data = yaml.safe_load(body)
+        except yaml.YAMLError:
+            raise CatalogError("bad YAML in resource-catalog") from None
     if not isinstance(data, dict):
-        raise CatalogError("resource-catalog must hold a YAML mapping")
+        raise CatalogError("resource-catalog must hold a table with ARN and Sensitivity columns")
     try:
         return Catalog.model_validate(data)
     except ValidationError as exc:

@@ -1,13 +1,14 @@
 # access-policy: the rules keymaster enforces. A PERSON pastes this into a Gateway library
-# document named "access-policy" and attaches it to keymaster. keymaster only reads documents
-# that no agent created, so no agent (prompt-injected or not) can rewrite these rules.
+# document named "access-policy"; it reaches the rooms in the leasedesk-governance package.
+# keymaster only reads documents that no agent created, so no agent (prompt-injected or not)
+# can rewrite these rules.
 #
 # Fill in the ids: in the Discord room, each person sends "@keymaster whoami" and copies the
 # participant id it replies with. Ids embed the Discord bridge id, so they change if Discord is
 # disconnected and reconnected; re-run whoami and update this document after a reconnect.
 # Then send "@keymaster reload-policy" (keymaster also re-reads it every 5 minutes).
 version: 1
-solo_mode: false            # true lets a requester approve their own lease (one-person testing)
+solo_mode: true            # true lets a requester approve their own lease (one-person testing)
 max_duration_minutes: 240
 default_duration_minutes: 60
 approval_timeout_minutes: 30
@@ -18,7 +19,7 @@ approvers:
   - {id: "<APPROVER_PARTICIPANT_ID>", name: "Priya", groups: [security]}
   - {id: "<REQUESTER_PARTICIPANT_ID>", name: "Arnab", groups: [eng-lead]}
 high_risk:
-  approvals: 2              # set to 1 for a two-person demo
+  approvals: 1              # demo value: production uses 2
   require_group: security
   approval_room: security-review
 allowed_resource_prefixes:

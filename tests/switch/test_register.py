@@ -40,6 +40,9 @@ def mock_gateway_and_rooms(agent_id: str) -> respx.Route:
     put = respx.put(f"{BASE}/gateway/agents/{agent_id}/addressing-policy").mock(
         return_value=httpx.Response(200, json={"addressing_policy": None})
     )
+    respx.put(f"{BASE}/gateway/agents/{agent_id}/display-name", name="display").mock(
+        return_value=httpx.Response(200, json={"id": agent_id})
+    )
     ops = f"{BASE}/agents/{agent_id}/ops"
     respx.post(f"{ops}/list_rooms").mock(
         return_value=httpx.Response(200, json={"result": [{"room_id": "r1", "name": "x"}]})
@@ -102,6 +105,38 @@ async def test_existing_agent_not_overwritten(settings: Settings, tmp_path: Path
     assert result.status == "existing"
     assert reg.call_count == 0
     assert load_credentials("keymaster", settings.secrets_dir).api_key.get_secret_value() == NEW_KEY
+
+
+@respx.mock
+async def test_register_sends_display_name(settings: Settings, tmp_path: Path) -> None:
+    reg = respx.post(f"{BASE}/agents").mock(
+        return_value=httpx.Response(200, json={"id": "se-1", "api_key": NEW_KEY})
+    )
+    mock_gateway_and_rooms("se-1")
+    await register_agent(
+        "sentinel", settings=settings, overwrite=False, admin=None, env_path=tmp_path / ".env"
+    )
+    assert json.loads(reg.calls.last.request.content)["display_name"] == "Sentinel"
+
+
+@respx.mock
+async def test_existing_agent_gets_display_name_through_gateway(
+    settings: Settings, tmp_path: Path
+) -> None:
+    """Registration can't rename an agent without a new key, so the owner sets it."""
+    save_credentials(
+        AgentCredentials(name="keymaster", id="km-1", api_key=SecretStr(NEW_KEY)),
+        settings.secrets_dir,
+    )
+    respx.get(f"{BASE}/agents/km-1/ops").mock(return_value=httpx.Response(200, json=[]))
+    mock_gateway_and_rooms("km-1")
+    async with GatewayAdmin(BASE, email="a@b", password="pw") as gw:
+        result = await register_agent(
+            "keymaster", settings=settings, overwrite=False, admin=gw, env_path=tmp_path / ".env"
+        )
+    assert result.status == "existing"
+    put = respx.routes["display"]
+    assert json.loads(put.calls.last.request.content) == {"display_name": "Keymaster"}
 
 
 @respx.mock

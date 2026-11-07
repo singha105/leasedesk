@@ -233,6 +233,60 @@ class ContextThread(_Open):
     replies: list[ContextEntry] = Field(default_factory=list)
 
 
+class PackageMeta(_Open):
+    """A package attached to the room: its documents arrive nested, not at the top level."""
+
+    id: str
+    name: str = ""
+    documents: list[DocumentMeta] = Field(default_factory=list)
+
+
 class References(_Open):
     documents: list[DocumentMeta] = Field(default_factory=list)
+    packages: list[PackageMeta] = Field(default_factory=list)
     linked_rooms: list[dict[str, Any]] = Field(default_factory=list)
+
+    def all_documents(self) -> list[DocumentMeta]:
+        """Documents attached directly, then those that come in packages."""
+        return [*self.documents, *(d for p in self.packages for d in p.documents)]
+
+
+# get_my_context (read by make doctor) ---------------------------------------------------------
+
+
+class ContextProvider(_Open):
+    provider: str
+    installed: bool = False
+    version: str | None = None
+    auth: str = "unknown"
+
+
+class ContextMachine(_Open):
+    id: str
+    name: str = ""
+    state: str = ""
+    providers: list[ContextProvider] = Field(default_factory=list)
+
+
+class ManagedState(_Open):
+    """Set for agents Console runs on a machine (scribe, skeptic); None for keymaster/sentinel."""
+
+    process: str | None = None
+    desired_state: str | None = None
+
+
+class ContextAgent(_Open):
+    id: str
+    name: str
+    who_can_talk: str | None = None
+    managed: ManagedState | None = None
+
+
+class ContextYou(_Open):
+    name: str = ""
+
+
+class MyContext(_Open):
+    you: ContextYou = Field(default_factory=ContextYou)
+    machines: list[ContextMachine] = Field(default_factory=list)
+    agents: list[ContextAgent] = Field(default_factory=list)
