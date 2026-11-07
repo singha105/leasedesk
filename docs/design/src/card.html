@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LeaseDesk GIF card</title>
+    <!-- The demo GIF's title and end cards, 1120 x 630: card.html?title or card.html?end.
+         Rendered to docs/design/cards/ by scripts/design/render.sh; make_gif.py reads them. -->
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      body {
+        width: 1120px;
+        height: 630px;
+        position: relative;
+      }
+      #art {
+        position: absolute;
+        inset: 0;
+      }
+      .card {
+        display: none;
+        position: absolute;
+      }
+      .title {
+        left: 78px;
+        top: 150px;
+        width: 500px;
+      }
+      .mark {
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+      .title .wordmark {
+        font-size: 146px;
+        margin-top: -6px;
+      }
+      .rule {
+        margin: 8px 0 22px 4px;
+        width: 360px;
+        height: 18px;
+      }
+      .title .caption {
+        font-size: 28px;
+        line-height: 1.3;
+        width: 452px;
+        margin-left: 4px;
+      }
+      .title .line {
+        margin: 22px 0 0 4px;
+        font-size: 22px;
+        line-height: 1.4;
+        width: 440px;
+        color: var(--ai);
+      }
+      .end {
+        left: 0;
+        right: 0;
+        top: 118px;
+        text-align: center;
+      }
+      .end .wordmark {
+        font-size: 128px;
+        margin-top: 18px;
+      }
+      .end .url {
+        margin-top: 18px;
+        font-size: 34px;
+        color: var(--ai);
+      }
+      .end .caption {
+        margin-top: 12px;
+        font-size: 25px;
+      }
+    </style>
+  </head>
+  <body>
+    <svg id="art" width="1120" height="630" viewBox="0 0 1120 630"></svg>
+    <div class="card title" id="title">
+      <div class="mark">
+        <div class="wordmark">LeaseDesk</div>
+        <svg width="62" height="62" viewBox="0 0 62 62" id="seal-title"></svg>
+      </div>
+      <svg class="rule" viewBox="0 0 360 18" id="rule"></svg>
+      <div class="caption">Just-in-time AWS access, asked for in a Switch room and ended by AWS itself</div>
+      <div class="line">AI drafts and critiques. A person approves. AWS ends the lease on time.</div>
+    </div>
+    <div class="card end" id="end">
+      <svg width="84" height="84" viewBox="0 0 84 84" id="seal-end" style="display: inline-block"></svg>
+      <div class="wordmark">LeaseDesk</div>
+      <div class="url">github.com/singha105/leasedesk</div>
+      <div class="caption">Built on Switch for Flip the Switch 2026, by team TigerMan</div>
+    </div>
+    <script src="art.js"></script>
+    <script>
+      const W = 1120;
+      const H = 630;
+      const kind = location.search.includes("end") ? "end" : "title";
+      document.getElementById(kind).style.display = "block";
+      const svg = document.getElementById("art");
+      const defs = E(svg, "defs");
+      const clip = E(defs, "clipPath", { id: "inside" });
+      E(clip, "path", { d: innerRule({ w: W, h: H, shrink: 1 }) });
+      const art = E(svg, "g", { "clip-path": "url(#inside)" });
+
+      if (kind === "title") {
+        sun(art, { cx: 1000, cy: 132, r: 56 });
+        kasumi(art, { x: 900, y: 104, len: 180, h: 14, flip: true });
+        kasumi(art, { x: 630, y: 470, len: 200, h: 12 });
+        houseWave(E(art, "g", { transform: "translate(-62 148) scale(0.9)" }));
+        seigaiha(E(art, "g"), {
+          x0: 560,
+          y0: 532,
+          x1: W,
+          y1: H,
+          r: 20,
+          left: (y) => 720 - (y - 532) * 1.9,
+        });
+        seal(document.getElementById("seal-title"), { x: 3, y: 3, size: 56 });
+        const rule = document.getElementById("rule");
+        E(rule, "path", {
+          d: "M2 9 C56 9 86 2 124 6 C162 10 190 16 228 10 C266 4 310 9 358 9",
+          fill: "none",
+          stroke: PAL.kin,
+          "stroke-width": 1.6,
+          "stroke-linecap": "round",
+        });
+        E(rule, "circle", { cx: 124, cy: 6, r: 2.4, fill: PAL.kin });
+      } else {
+        kasumi(art, { x: 60, y: 520, len: 260, h: 13 });
+        kasumi(art, { x: 800, y: 520, len: 260, h: 13, flip: true });
+        seigaiha(E(art, "g"), {
+          x0: 0,
+          y0: 566,
+          x1: W,
+          y1: H,
+          r: 18,
+          left: (y) => 330 - (y - 566) * 3,
+          right: (y) => W - 330 + (y - 566) * 3,
+        });
+        seal(document.getElementById("seal-end"), { x: 4, y: 4, size: 76, rot: -3 });
+      }
+      frame(svg, { w: W, h: H });
+    </script>
+  </body>
+</html>

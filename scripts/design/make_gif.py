@@ -1,7 +1,10 @@
 """Build docs/media/leasedesk.gif from real Discord captures of the live runs.
 
 Usage: python scripts/design/make_gif.py [out.gif] [frames_dir]
-Needs Pillow. The font paths below are macOS paths.
+
+Needs Pillow and the fonts in build/fonts/ (`scripts/design/render.sh fonts` downloads them).
+Reads docs/design/captures/, the title and end cards in docs/design/cards/ (rendered by
+`scripts/design/render.sh cards`) and the scenario screenshots in docs/media/.
 """
 
 import sys
@@ -11,21 +14,42 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
 CAPTURES = ROOT / "docs/design/captures"
+CARDS = ROOT / "docs/design/cards"
 MEDIA = ROOT / "docs/media"
+FONTS = ROOT / "build/fonts"
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else MEDIA / "leasedesk.gif"
 FRAMES_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "build/gif-frames"
 
-W, H, CAP, PAD = 1120, 630, 66, 16
-BG = (49, 51, 56)
-BAND = (30, 31, 34)
-ACCENT = (88, 101, 242)
-WHITE = (242, 243, 245)
-MUTED = (181, 186, 193)
+W, H, BAND, PAD = 1120, 630, 74, 22
+WASHI = (237, 227, 204)
+SUMI = (35, 32, 28)
+AI = (28, 63, 102)
+SHU = (178, 58, 43)
+KIN = (169, 132, 58)
 
-BOLD = ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", 25, index=1)
-BIG = ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", 64, index=1)
-MID = ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", 30, index=0)
-SMALL = ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", 24, index=0)
+
+def font(name: str, size: int, weight: int | None = None) -> ImageFont.FreeTypeFont:
+    path = FONTS / name
+    if not path.exists():
+        sys.exit(f"{path} is missing: run scripts/design/render.sh fonts")
+    f = ImageFont.truetype(str(path), size)
+    if weight is not None:
+        f.set_variation_by_axes([weight])
+    return f
+
+
+WORDMARK = font("BigelowRules-Regular.ttf", 40)
+NUMERAL = font("Alegreya[wght].ttf", 30 * 4, 800)
+KANJI = font("ShipporiMinchoB1-ExtraBold.ttf", 30 * 4)
+
+
+def caption_font(text: str, room: int) -> ImageFont.FreeTypeFont:
+    """Alegreya at 27 px, or smaller until the caption fits its room."""
+    for size in range(27, 19, -1):
+        f = font("Alegreya[wght].ttf", size, 560)
+        if f.getlength(text) <= room:
+            return f
+    return f
 
 
 def blob(tag: str) -> Image.Image:
@@ -42,8 +66,9 @@ def to_width(im: Image.Image, w: int = 1568) -> Image.Image:
 
 def stack(parts: list[Image.Image], gap: int = 10) -> Image.Image:
     parts = [to_width(p) for p in parts]
+    bg = parts[0].getpixel((parts[0].width - 5, 5))
     out = Image.new(
-        "RGB", (parts[0].width, sum(p.height for p in parts) + gap * (len(parts) - 1)), BG
+        "RGB", (parts[0].width, sum(p.height for p in parts) + gap * (len(parts) - 1)), bg
     )
     y = 0
     for p in parts:
@@ -52,36 +77,49 @@ def stack(parts: list[Image.Image], gap: int = 10) -> Image.Image:
     return out
 
 
+def seal(mark: str, size: int = 44) -> Image.Image:
+    """A vermilion seal with a washi numeral or kanji, drawn at 4x and scaled down."""
+    k = 4
+    s = size * k
+    im = Image.new("RGBA", (s + 8 * k, s + 8 * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    o = 4 * k
+    d.rounded_rectangle([o, o, o + s, o + s], radius=4 * k, fill=SHU)
+    inner = [o + 3 * k, o + 3 * k, o + s - 3 * k, o + s - 3 * k]
+    d.rounded_rectangle(inner, radius=2 * k, outline=WASHI, width=2 * k)
+    glyph = KANJI if not mark.isdigit() else NUMERAL
+    d.text((o + s / 2, o + s / 2 + (0 if mark.isdigit() else 2 * k)), mark, WASHI, glyph, "mm")
+    im = im.rotate(-3, resample=Image.BICUBIC)
+    return im.resize((im.width // k, im.height // k), Image.LANCZOS)
+
+
 def frame(content: Image.Image, step: str, caption: str) -> Image.Image:
-    f = Image.new("RGB", (W, H), BG)
+    f = Image.new("RGB", (W, H), WASHI)
     d = ImageDraw.Draw(f)
-    d.rectangle([0, 0, W, CAP], fill=BAND)
-    x = PAD + 4
-    if step:
-        d.rounded_rectangle([x, 16, x + 36, 50], radius=8, fill=ACCENT)
-        d.text((x + 18, 33), step, font=BOLD, fill=WHITE, anchor="mm")
-        x += 50
-    d.text((x, 33), caption, font=BOLD, fill=WHITE, anchor="lm")
-    maxw, maxh = W - 2 * PAD, H - CAP - 2 * PAD
+    # the caption band: a seal, the caption in sumi, the wordmark, then a double gold rule
+    mark = seal(step or "鍵")
+    f.paste(mark, (PAD - 4, (BAND - mark.height) // 2 + 1), mark)
+    wordmark_w = WORDMARK.getlength("LeaseDesk")
+    x = PAD + mark.width + 10
+    room = W - x - wordmark_w - PAD - 24
+    d.text((x, BAND // 2 + 1), caption, SUMI, caption_font(caption, room), "lm")
+    d.text((W - PAD, BAND // 2 + 2), "LeaseDesk", AI, WORDMARK, "rm")
+    d.line([(PAD, BAND - 2), (W - PAD, BAND - 2)], KIN, 2)
+    d.line([(PAD, BAND + 3), (W - PAD, BAND + 3)], KIN, 1)
+    # the capture, matted like a print: a sumi keyline and a gold rule around it
+    maxw, maxh = W - 2 * PAD - 16, H - BAND - 2 * PAD - 16
     s = min(maxw / content.width, maxh / content.height)
     c = content.resize((round(content.width * s), round(content.height * s)), Image.LANCZOS)
-    f.paste(c, (PAD, CAP + PAD))
+    cx = (W - c.width) // 2
+    cy = BAND + PAD + (H - BAND - 2 * PAD - c.height) // 2
+    f.paste(c, (cx, cy))
+    d.rectangle([cx - 1, cy - 1, cx + c.width, cy + c.height], None, SUMI, 1)
+    d.rectangle([cx - 8, cy - 8, cx + c.width + 7, cy + c.height + 7], None, KIN, 2)
     return f
 
 
-def card(
-    title: str, lines: list[tuple[str, ImageFont.FreeTypeFont, tuple[int, int, int]]]
-) -> Image.Image:
-    f = Image.new("RGB", (W, H), BAND)
-    d = ImageDraw.Draw(f)
-    y = 200
-    d.text((W // 2, y), title, font=BIG, fill=WHITE, anchor="mm")
-    y += 80
-    for text, font, color in lines:
-        d.text((W // 2, y), text, font=font, fill=color, anchor="mm")
-        y += 48
-    d.rectangle([W // 2 - 60, 120, W // 2 + 60, 126], fill=ACCENT)
-    return f
+def card(name: str) -> Image.Image:
+    return Image.open(CARDS / f"{name}.png").convert("RGB").resize((W, H), Image.LANCZOS)
 
 
 req = blob("01-request")
@@ -92,16 +130,7 @@ happy = to_width(media("happy-path.png"))
 cut = round(330 * happy.width / 1456)
 
 frames = [
-    (
-        card(
-            "LeaseDesk",
-            [
-                ("Just-in-time AWS access, asked for in a Switch room", MID, WHITE),
-                ("AI drafts and critiques. A person approves. AWS ends it on time.", SMALL, MUTED),
-            ],
-        ),
-        3200,
-    ),
+    (card("title"), 3200),
     (frame(req, "1", "Ask in plain English in #access-desk"), 3500),
     (
         frame(
@@ -161,16 +190,7 @@ frames = [
         ),
         4500,
     ),
-    (
-        card(
-            "LeaseDesk",
-            [
-                ("github.com/singha105/leasedesk", MID, WHITE),
-                ("Built on Switch  ·  Flip the Switch 2026  ·  Team TigerMan", SMALL, MUTED),
-            ],
-        ),
-        3500,
-    ),
+    (card("end"), 3500),
 ]
 
 FRAMES_DIR.mkdir(parents=True, exist_ok=True)

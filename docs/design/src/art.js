@@ -79,14 +79,14 @@ function track(points, n = 600) {
 }
 
 /* Seigaiha: rows of concentric-ring scales, each row half a scale lower and offset by R.
-   left(y) gives the leftmost centre allowed on a row, so the sea can end in whole scales. */
-function seigaiha(g, { x0, y0, x1, y1, r, left = () => -Infinity, fill = PAL.hanada, ring = PAL.washi, edge = PAL.ai }) {
+   left(y) and right(y) bound the centres allowed on a row, so the sea can end in whole scales. */
+function seigaiha(g, { x0, y0, x1, y1, r, left = () => -Infinity, right = () => Infinity, fill = PAL.hanada, ring = PAL.washi, edge = PAL.ai }) {
   const rows = Math.ceil((y1 - y0) / (r / 2)) + 2;
   for (let row = 0; row < rows; row++) {
     const y = y0 + (row * r) / 2;
     const off = row % 2 ? r : 0;
     for (let x = x0 - 2 * r + off; x <= x1 + 2 * r; x += 2 * r) {
-      if (x < left(y)) continue;
+      if (x < left(y) || x > right(y)) continue;
       E(g, "circle", { cx: x, cy: y, r, fill, stroke: edge, "stroke-width": r * 0.07 });
       for (const f of [0.78, 0.56, 0.34]) {
         E(g, "circle", { cx: x, cy: y, r: r * f, fill: "none", stroke: ring, "stroke-width": r * 0.075 });

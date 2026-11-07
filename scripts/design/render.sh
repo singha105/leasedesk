@@ -3,7 +3,7 @@
 # quantize them with Pillow so they stay small.
 #
 #   scripts/design/render.sh                 everything
-#   scripts/design/render.sh hero agents     just those (hero, social, agents, prints)
+#   scripts/design/render.sh hero agents     just those (hero, social, agents, prints, cards)
 #
 # Needs curl, Chrome or Chromium (set CHROME to its path if it isn't found) and Python with
 # Pillow (set PYTHON if python3 lacks it). The fonts are downloaded once into build/fonts/.
@@ -66,6 +66,15 @@ hero() { shot hero 1280 440 hero && quantize "$OUT/hero.png" "$MEDIA/hero.png" 9
 social() { shot social 1280 640 social && quantize "$OUT/social.png" "$MEDIA/social.png" 96 1280x640; }
 agents() { shot agents 1280 600 agents && quantize "$OUT/agents.png" "$MEDIA/agents.png" 128; }
 
+# the demo GIF's title and end cards, at the GIF's own size; scripts/design/make_gif.py reads them
+cards() {
+  mkdir -p docs/design/cards
+  local k
+  for k in title end; do
+    shot card 1120 630 "card-$k" "?$k" && quantize "$OUT/card-$k.png" "docs/design/cards/$k.png" 96 1120x630
+  done
+}
+
 prints() {
   local name caption height
   while IFS='|' read -r name caption; do
@@ -83,10 +92,10 @@ EOF
 
 fonts
 targets=("$@")
-[ ${#targets[@]} -gt 0 ] || targets=(hero social agents prints)
+[ ${#targets[@]} -gt 0 ] || targets=(hero social agents prints cards)
 for t in "${targets[@]}"; do
   case "$t" in
-    hero | social | agents | prints | fonts) "$t" ;;
+    hero | social | agents | prints | cards | fonts) "$t" ;;
     *)
       echo "unknown target: $t" >&2
       exit 2
