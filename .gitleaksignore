@@ -1,0 +1,5 @@
+# Fake AWS key in the log-redaction test (tests/test_foundation.py), not a credential.
+c2f3d4d5966c76be6a72e302997443569a43f27b:tests/test_foundation.py:aws-access-token:36
+c2f3d4d5966c76be6a72e302997443569a43f27b:tests/test_foundation.py:aws-access-token:39
+tests/test_foundation.py:aws-access-token:36
+tests/test_foundation.py:aws-access-token:39
